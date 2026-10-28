@@ -25,6 +25,11 @@ export function resetChrome(): void {
         }
         for (const l of listeners) l(structuredClone(changes), 'local');
       },
+      async remove(key: string) {
+        const changes: Changes = { [key]: { oldValue: store[key] } };
+        delete store[key];
+        for (const l of listeners) l(structuredClone(changes), 'local');
+      },
     },
     onChanged: { addListener: (l: Listener) => listeners.push(l) },
   },

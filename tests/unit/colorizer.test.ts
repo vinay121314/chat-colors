@@ -1,10 +1,12 @@
 ﻿import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createColorizer } from '../../src/content/colorizer';
 import { NEUTRAL, NONE, addStarterKeywords, defaultSettings, type Settings } from '../../src/core/schema';
+import { ID, buildSidebar, mountPage, row, settle } from '../fixtures/sidebar';
 
 /** Opt-in rules + neutral fallback: the configuration these behaviours are tested against. */
 const starter = (): Settings => ({ ...addStarterKeywords(defaultSettings()), fallback: NEUTRAL });
-import { ID, buildSidebar, mountPage, row, settle } from '../fixtures/sidebar';
+const PROJECT = 'g-p-0123456789abcdef0123456789abcdef'; // fixture project id
+const GPT = 'g-AbCdEf123'; // fixture custom GPT id
 
 const color = (id: string) =>
   document.querySelector<HTMLElement>(`#ds-sidebar [data-crc="${id}"]`)?.style.getPropertyValue('--crc-c') || null;
@@ -13,12 +15,14 @@ const GREEN = '#16a34a'; // Work
 
 let c: ReturnType<typeof createColorizer>;
 afterEach(() => c?.stop());
+const host = { write: vi.fn(), setFilter: vi.fn() };
 
 function start(s: Settings = starter()) {
-  c = createColorizer(vi.fn());
+  c = createColorizer(host);
   c.update(s);
   return s;
 }
+const hidden = (id: string) => document.querySelector(`[data-crc="${id}"]`)!.hasAttribute('data-crc-hidden');
 
 describe('colorizer on fixture sidebar', () => {
   it('decorates sidebar conversations (incl. Project and GPT chats) and ignores other links', () => {
@@ -30,7 +34,47 @@ describe('colorizer on fixture sidebar', () => {
     expect(color(ID.project)).toBe('#e03131'); // "urgent" (project chat URL)
     expect(color(ID.gpt)).toBe('#0e9fb3'); // "research" (custom GPT chat URL)
     expect(main.querySelector('[data-crc]')).toBeNull();
-    expect(document.querySelectorAll('#ds-sidebar nav[aria-label="Sidebar"] [data-crc]')).toHaveLength(0);
+    // Only the Project entry is decorated in the shortcuts nav (Images/GPTs/New chat are not).
+    const shortcuts = [...document.querySelectorAll('#ds-sidebar nav[aria-label="Sidebar"] [data-crc]')];
+    expect(shortcuts.map((e) => e.getAttribute('data-crc'))).toEqual([`group:${PROJECT}`]);
+  });
+
+  it('Project/GPT color applies to all its chats; precedence manual > group > rule', () => {
+    mountPage();
+    const s = starter();
+    s.groups[PROJECT] = { color: '#b08900', name: 'Side project' };
+    s.groups[GPT] = { color: '#d6336c', name: 'Code helper' };
+    start(s);
+    expect(color(ID.project)).toBe('#b08900'); // beats its "urgent" keyword rule
+    expect(color(ID.gpt)).toBe('#d6336c');
+    expect(color(`group:${PROJECT}`)).toBe('#b08900'); // the Project entry itself
+    expect(color(ID.ts)).toBe(BLUE); // chats outside the Project unaffected
+    c.update({ ...s, overrides: { [ID.project]: '#000000' } });
+    expect(color(ID.project)).toBe('#000000'); // manual still wins
+  });
+
+  it('filter hides non-matching chats, shows a pill, and restores on clear', async () => {
+    mountPage();
+    start();
+    c.setFilter(BLUE);
+    expect(hidden(ID.ts)).toBe(false);
+    expect(hidden(ID.meeting)).toBe(true);
+    expect(hidden(`group:${PROJECT}`)).toBe(false); // Project entries are never hidden
+    const bar = document.querySelector('.crc-filterbar')!;
+    expect(bar.textContent).toContain('Showing Development · 1 chat');
+    (bar.querySelector('button') as HTMLButtonElement).click();
+    expect(host.setFilter).toHaveBeenCalledWith(null);
+    c.setFilter(null);
+    expect(document.querySelectorAll('[data-crc-hidden]')).toHaveLength(0);
+    expect(document.querySelector('.crc-filterbar')).toBeNull();
+  });
+
+  it('reports a legend of colors in use with labels and counts', () => {
+    mountPage();
+    start();
+    const { legend } = c.current('/');
+    expect(legend.find((l) => l.color === BLUE)).toEqual({ color: BLUE, label: 'Development', count: 1 });
+    expect(legend.find((l) => l.color === NEUTRAL)?.count).toBe(1);
   });
 
   it('decorates rows loaded later (lazy load / infinite scroll)', async () => {
@@ -120,7 +164,7 @@ describe('colorizer on fixture sidebar', () => {
     const s = start();
     expect(document.getElementById('crc-vars')).not.toBeNull();
     c.update({ ...s, enabled: false });
-    expect(document.querySelector('[data-crc], .crc-btn, #crc-vars')).toBeNull();
+    expect(document.querySelector('[data-crc], .crc-btn, #crc-vars, .crc-filterbar, [data-crc-hidden]')).toBeNull();
     c.update({ ...s, enabled: true });
     expect(color(ID.ts)).toBe(BLUE);
   });
@@ -157,9 +201,12 @@ describe('colorizer on fixture sidebar', () => {
   it('reports the current conversation with its visible title', () => {
     mountPage();
     start();
-    expect(c.current(`/c/${ID.meeting}`)).toEqual({ id: ID.meeting, title: 'Client meeting notes' });
-    expect(c.current(`/g/g-p-0123456789abcdef0123456789abcdef-side-project/c/${ID.project}`).id).toBe(ID.project);
-    expect(c.current('/')).toEqual({ id: null, title: null });
-    expect(c.current(`/c/${ID.main}`)).toEqual({ id: ID.main, title: null }); // not in sidebar
+    expect(c.current(`/c/${ID.meeting}`)).toMatchObject({ id: ID.meeting, title: 'Client meeting notes', group: null });
+    expect(c.current(`/g/${PROJECT}-side-project/c/${ID.project}`)).toMatchObject({
+      id: ID.project,
+      group: { key: PROJECT, name: 'Project', kind: 'Project' }, // name from the sidebar entry's text
+    });
+    expect(c.current('/')).toMatchObject({ id: null, title: null });
+    expect(c.current(`/c/${ID.main}`)).toMatchObject({ id: ID.main, title: null }); // not in sidebar
   });
 });

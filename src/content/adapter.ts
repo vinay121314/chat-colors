@@ -5,12 +5,46 @@
 // UNVERIFIED (logged-in): conversation rows are `<a href="/c/<id>">` / `<a href="/g/<gizmo>/c/<id>">`.
 // Because the logged-in markup is unverified, the root is derived from the conversation links themselves
 // when the known containers don't hold any (see findRoot).
-import { ID_PATTERN, normalizeId } from '../core/schema';
+// UNVERIFIED (logged-in): Project / custom GPT entries are `<a href="/g/<gizmo>/project">` / `<a href="/g/<gizmo>">`.
+import { GROUP_PATTERN, ID_PATTERN, normalizeId } from '../core/schema';
 
 const ROOT_SELECTORS = ['#ds-sidebar', 'nav[data-slot="sidebar-history"]', 'nav[aria-label="Chat history"]', '#history'];
-const CONV_PATH = new RegExp(`^/(?:g/[^/]+/)?c/(${ID_PATTERN})/?$`);
+const CONV_PATH = new RegExp(`^/(?:g/([^/]+)/)?c/(${ID_PATTERN})/?$`);
+const GROUP_PATH = /^\/g\/([^/]+)(?:\/project)?\/?$/;
+/** `g-p-<hex>-my-project` -> key `g-p-<hex>`, slug `my project`. */
+const GROUP_SEGMENT = new RegExp(`^(${GROUP_PATTERN})(?:-(.+))?$`);
 const CANDIDATES = 'a[href*="/c/"]';
+const GROUP_CANDIDATES = 'a[href^="/g/"], a[href^="https://chatgpt.com/g/"]';
 const NAV = 'nav, [role="navigation"]';
+
+/** A Project or custom GPT: stable key from the URL, plus a readable slug as a name fallback. */
+export interface Group {
+  key: string;
+  slug: string;
+}
+
+function pathOf(href: string | null): string | null {
+  return (href && /^(?:https:\/\/chatgpt\.com)?(\/[^?#]*)/.exec(href)?.[1]) || null;
+}
+
+function groupOf(segment: string | undefined): Group | null {
+  const m = segment ? GROUP_SEGMENT.exec(segment) : null;
+  return m ? { key: m[1]!, slug: (m[2] ?? '').replace(/-/g, ' ').trim() } : null;
+}
+
+/** The Project/GPT a conversation link belongs to, from its URL. */
+export function parseChatGroup(href: string | null): Group | null {
+  const p = pathOf(href);
+  return p ? groupOf(CONV_PATH.exec(p)?.[1]) : null;
+}
+
+/** A sidebar link to a Project or custom GPT itself (not one of its chats). */
+export function parseGroupLink(href: string | null): Group | null {
+  const p = pathOf(href);
+  return p ? groupOf(GROUP_PATH.exec(p)?.[1]) : null;
+}
+
+export const kindOf = (key: string) => (key.startsWith('g-p-') ? 'Project' : 'GPT');
 
 export const ID_ATTR = 'data-crc';
 export const COLOR_ATTR = 'data-crc-color';
@@ -26,12 +60,15 @@ export interface Row {
   id: string;
 }
 
+export interface GroupRow {
+  el: HTMLAnchorElement;
+  group: Group;
+}
+
 /** Conversation id from a relative or chatgpt.com href; null for anything else. */
 export function parseConversationId(href: string | null): string | null {
-  if (!href) return null;
-  const m = /^(?:https:\/\/chatgpt\.com)?(\/[^?#]*)/.exec(href);
-  const id = m?.[1] ? CONV_PATH.exec(m[1])?.[1] : undefined;
-  return normalizeId(id);
+  const p = pathOf(href);
+  return normalizeId(p ? CONV_PATH.exec(p)?.[2] : undefined);
 }
 
 function hasRows(root: ParentNode): boolean {
@@ -72,6 +109,16 @@ export function findRows(root: ParentNode): Row[] {
   return rows;
 }
 
+/** Sidebar entries for Projects / custom GPTs themselves. */
+export function findGroupRows(root: ParentNode): GroupRow[] {
+  const rows: GroupRow[] = [];
+  for (const el of root.querySelectorAll<HTMLAnchorElement>(GROUP_CANDIDATES)) {
+    const group = parseGroupLink(el.getAttribute('href'));
+    if (group) rows.push({ el, group });
+  }
+  return rows;
+}
+
 /** Visible title only: text inside the row, skipping buttons (ChatGPT's row menu, our control). */
 export function getTitle(a: Element): string {
   let s = '';
@@ -94,10 +141,22 @@ function setAttr(el: Element, name: string, value: string | null): void {
 const positioned = new WeakSet<Element>();
 const boxes = new WeakMap<Element, Element>();
 
+const isTarget = (a: Element) => {
+  const h = a.getAttribute('href');
+  return !!(parseConversationId(h) || parseGroupLink(h));
+};
+
+/** Number of links we decorate (chats, Projects, GPTs) inside el, counting el itself. */
 function convCount(el: Element): number {
-  let n = 0;
-  for (const a of el.querySelectorAll(CANDIDATES)) if (parseConversationId(a.getAttribute('href'))) n++;
+  let n = el.matches('a[href]') && isTarget(el) ? 1 : 0;
+  for (const a of el.querySelectorAll('a[href]')) if (isTarget(a)) n++;
   return n;
+}
+
+/** The chat/Project/GPT link a decorated row container stands for. */
+function primaryLink(box: Element): HTMLAnchorElement | null {
+  if (box instanceof HTMLAnchorElement && isTarget(box)) return box;
+  return [...box.querySelectorAll<HTMLAnchorElement>('a[href]')].find(isTarget) ?? null;
 }
 
 /**
@@ -185,8 +244,8 @@ export function decorate(
       e.stopPropagation();
       const box = b.parentElement;
       const rid = box?.getAttribute(ID_ATTR);
-      const a = box?.matches('a[href]') ? box : box?.querySelector(CANDIDATES);
-      if (a instanceof HTMLAnchorElement && rid) onOpen(b, { el: a, id: rid });
+      const a = box ? primaryLink(box) : null;
+      if (a && rid) onOpen(b, { el: a, id: rid });
     });
     // Native <button> turns Enter/Space into click; just keep the keys away from ChatGPT's shortcuts.
     b.addEventListener('keydown', (e) => e.stopPropagation());
@@ -204,9 +263,66 @@ export function undecorate(el: Element): void {
   el.classList.remove(POS_CLASS);
   positioned.delete(el);
   (el as HTMLElement).style?.removeProperty('--crc-c');
+  el.removeAttribute(HIDDEN_ATTR);
   child(el, BTN_CLASS)?.remove();
   child(el, BAR_CLASS)?.remove();
   child(el, FILL_CLASS)?.remove();
+}
+
+// ---------------------------------------------------------------------------------------------
+// Filter: hide non-matching rows (CSS on our own attribute) and show a sticky "Showing …" pill.
+
+const HIDDEN_ATTR = 'data-crc-hidden';
+
+export function setHidden(el: Element, hidden: boolean): void {
+  if (el.hasAttribute(HIDDEN_ATTR) !== hidden) el.toggleAttribute(HIDDEN_ATTR, hidden);
+}
+
+let filterBar: HTMLElement | null = null;
+
+export interface FilterInfo {
+  color: string;
+  label: string;
+  count: number;
+}
+
+/** Shows (or removes, when info is null) the filter pill just above the first chat row. */
+export function renderFilterBar(firstRow: Element | null, info: FilterInfo | null, onClear: () => void): void {
+  if (!info || !firstRow?.parentElement) {
+    filterBar?.remove();
+    filterBar = null;
+    return;
+  }
+  if (!filterBar) {
+    filterBar = document.createElement('div');
+    filterBar.className = 'crc-filterbar';
+    filterBar.setAttribute('role', 'status');
+    const dot = document.createElement('i');
+    const text = document.createElement('span');
+    const clear = document.createElement('button');
+    clear.type = 'button';
+    clear.textContent = 'Clear';
+    clear.setAttribute('aria-label', 'Clear color filter');
+    clear.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      onClear();
+    });
+    filterBar.append(dot, text, clear);
+  }
+  // Opaque background sampled from the sidebar itself, so the sticky pill matches ChatGPT's theme.
+  for (let n: Element | null = firstRow.parentElement; n; n = n.parentElement) {
+    const bg = getComputedStyle(n).backgroundColor;
+    if (bg && bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)') {
+      filterBar.style.setProperty('--crc-bg', bg);
+      break;
+    }
+  }
+  const [dot, text] = filterBar.children as unknown as [HTMLElement, HTMLElement];
+  dot.style.setProperty('--crc-c', info.color);
+  const label = `Showing ${info.label} · ${info.count} chat${info.count === 1 ? '' : 's'}`;
+  if (text.textContent !== label) text.textContent = label;
+  if (filterBar.nextElementSibling !== firstRow) firstRow.parentElement.insertBefore(filterBar, firstRow);
 }
 
 export function decorated(root: ParentNode): Element[] {

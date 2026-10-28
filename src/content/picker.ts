@@ -1,9 +1,16 @@
-// In-page color picker. Lives in a shadow root (page CSS can't reach it) and uses the
+﻿// In-page color picker. Lives in a shadow root (page CSS can't reach it) and uses the
 // native popover API for light-dismiss and Esc handling. Theme follows ChatGPT's actual background.
 import { resolveColor } from '../core/rules';
 import { NONE, PALETTE, normalizeHex, type Settings } from '../core/schema';
 
-export type SetOverride = (id: string, value: string | null) => void;
+/** What the picker edits: a chat (maybe inside a Project/GPT), or a Project/GPT entry itself (id null). */
+export interface PickTarget {
+  id: string | null;
+  title: string;
+  group: { key: string; name: string; kind: string } | null;
+}
+/** scope 'chat' = this conversation, 'group' = whole Project/GPT, 'filter' = sidebar filter. */
+export type Apply = (scope: 'chat' | 'group' | 'filter', value: string | null) => void;
 
 const CSS = `
 :host { all: initial; }
@@ -52,6 +59,12 @@ input[type=text]:focus { outline: none; border-color: var(--ring); }
 .btn.primary:hover { opacity: .88; }
 .btn.ghost { color: var(--muted); }
 .btn.ghost:hover { background: var(--soft); color: var(--fg); }
+.seg { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 3px; padding: 3px; margin-top: 10px; border-radius: 9px; background: var(--soft); }
+.seg button { all: unset; height: 26px; border-radius: 7px; text-align: center; font-size: 12px; font-weight: 500; color: var(--muted); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 6px; }
+.seg button[aria-pressed="true"] { background: var(--bg); color: var(--fg); box-shadow: 0 1px 2px rgb(0 0 0 / .12); }
+.filter { all: unset; display: flex; align-items: center; gap: 8px; width: 100%; box-sizing: border-box; padding: 7px 8px; border-radius: 8px; font-size: 12.5px; color: var(--muted); cursor: pointer; }
+.filter:hover { background: var(--soft); color: var(--fg); }
+.filter i { width: 10px; height: 10px; border-radius: 50%; background: var(--c); }
 footer { display: flex; justify-content: space-between; padding: 6px 8px; border-top: 1px solid var(--line); background: color-mix(in srgb, var(--soft) 55%, var(--bg)); }
 :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 `;
@@ -115,99 +128,152 @@ function isDark(from: Element): boolean {
   return matchMedia('(prefers-color-scheme: dark)').matches;
 }
 
-export function openPicker(btn: HTMLElement, id: string, title: string, s: Settings, set: SetOverride): void {
+
+export function openPicker(btn: HTMLElement, target: PickTarget, s: Settings, apply: Apply): void {
   ensure();
   trigger = btn;
-  const choose = (v: string | null) => {
-    pop.hidePopover();
-    set(id, v);
-  };
-  const cur = resolveColor(id, title, s);
-  const manual = cur.source === 'manual' ? cur.color : null;
-
-  const head = el('header');
-  const status = el('div', 'status');
-  const dot = el('i');
-  if (cur.color) dot.style.setProperty('--c', cur.color);
-  status.append(
-    dot,
-    cur.source === 'manual'
-      ? cur.color
-        ? 'Manual color'
-        : 'Manually uncolored'
-      : cur.source === 'rule'
-        ? `Auto · ${cur.category?.name}`
-        : 'Auto · Uncategorized',
-  );
-  head.append(el('p', 'eyebrow', 'Conversation color'), el('p', 'title', title || 'Untitled conversation'), status);
-
-  const body = el('div', 'body');
-  if (s.categories.length) {
-    const chips = el('div', 'chips');
-    for (const c of s.categories) {
-      const b = button('', 'chip', () => choose(c.color));
-      const i = el('i');
-      i.style.setProperty('--c', c.color);
-      b.append(i, el('span', '', c.name));
-      b.setAttribute('aria-pressed', String(manual === c.color));
-      chips.append(b);
-    }
-    const sec = el('div');
-    sec.append(el('p', 'eyebrow', 'Categories'), chips);
-    body.append(sec);
-  }
-
-  const swatches = el('div', 'swatches');
-  for (const c of PALETTE) {
-    const b = button('', 'sw', () => choose(c));
-    b.style.setProperty('--c', c);
-    b.setAttribute('aria-label', `Color ${c}`);
-    b.title = c;
-    b.setAttribute('aria-pressed', String(manual === c));
-    swatches.append(b);
-  }
-  const colors = el('div');
-  colors.append(el('p', 'eyebrow', 'Colors'), swatches);
-
-  const well = el('label', 'well');
-  const picker = el('input');
-  picker.type = 'color';
-  picker.value = cur.color ?? PALETTE[1]!;
-  picker.setAttribute('aria-label', 'Custom color');
-  well.append(picker);
-  const hex = el('input');
-  hex.type = 'text';
-  hex.value = picker.value;
-  hex.spellcheck = false;
-  hex.setAttribute('aria-label', 'Custom HEX color');
-  picker.addEventListener('input', () => {
-    hex.value = picker.value;
-    hex.setCustomValidity('');
-  });
-  const apply = () => {
-    const v = normalizeHex(hex.value);
-    if (!v) {
-      hex.setCustomValidity('Use #rgb or #rrggbb');
-      hex.reportValidity();
-      return;
-    }
-    choose(v);
-  };
-  hex.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') apply();
-  });
-  const custom = el('div', 'custom');
-  custom.append(well, hex, button('Apply', 'btn primary', apply));
-  const customSec = el('div');
-  customSec.append(el('p', 'eyebrow', 'Custom'), custom);
-  body.append(colors, customSec);
-
-  const foot = el('footer');
-  foot.append(button('Reset to automatic', 'btn ghost', () => choose(null)), button('Remove color', 'btn ghost', () => choose(NONE)));
-
   pop.dataset.theme = isDark(btn) ? 'dark' : 'light';
-  pop.replaceChildren(head, body, foot);
+  let scope: 'chat' | 'group' = target.id ? 'chat' : 'group';
 
+  const render = () => {
+    const choose = (v: string | null) => {
+      pop.hidePopover();
+      apply(scope, v);
+    };
+    const groupColor = target.group ? (s.groups[target.group.key]?.color ?? null) : null;
+    const cur = target.id ? resolveColor(target.id, target.title, s, target.group?.key) : null;
+    // What "selected" means depends on scope: the manual color, or the Project/GPT color.
+    const selected = scope === 'group' ? groupColor : cur?.source === 'manual' ? cur.color : null;
+    const shown = scope === 'group' ? groupColor : (cur?.color ?? null);
+
+    const head = el('header');
+    const status = el('div', 'status');
+    const dot = el('i');
+    if (shown) dot.style.setProperty('--c', shown);
+    const g = target.group;
+    status.append(
+      dot,
+      scope === 'group'
+        ? groupColor
+          ? `${g?.kind} color · applies to all its chats`
+          : `No ${g?.kind} color`
+        : cur?.source === 'manual'
+          ? cur.color
+            ? 'Manual color'
+            : 'Manually uncolored'
+          : cur?.source === 'group'
+            ? `From ${g?.kind} · ${g?.name}`
+            : cur?.source === 'rule'
+              ? `Auto · ${cur.category?.name}`
+              : 'No color',
+    );
+    head.append(
+      el('p', 'eyebrow', scope === 'group' ? `${g?.kind} color` : 'Conversation color'),
+      el('p', 'title', scope === 'group' ? g?.name || 'Untitled' : target.title || 'Untitled conversation'),
+      status,
+    );
+    if (target.id && g) {
+      // Scope switch: this chat only, or every chat in its Project/GPT.
+      const seg = el('div', 'seg');
+      for (const [sc, label] of [
+        ['chat', 'This chat'],
+        ['group', `All in ${g.kind}`],
+      ] as const) {
+        const b = button(label, '', () => {
+          scope = sc;
+          render();
+          pop.querySelector<HTMLElement>('.seg [aria-pressed="true"]')?.focus();
+        });
+        b.setAttribute('aria-pressed', String(scope === sc));
+        seg.append(b);
+      }
+      head.append(seg);
+    }
+
+    const body = el('div', 'body');
+    if (s.categories.length) {
+      const chips = el('div', 'chips');
+      for (const c of s.categories) {
+        const b = button('', 'chip', () => choose(c.color));
+        const i = el('i');
+        i.style.setProperty('--c', c.color);
+        b.append(i, el('span', '', c.name));
+        b.setAttribute('aria-pressed', String(selected === c.color));
+        chips.append(b);
+      }
+      const sec = el('div');
+      sec.append(el('p', 'eyebrow', 'Categories'), chips);
+      body.append(sec);
+    }
+
+    const swatches = el('div', 'swatches');
+    for (const c of PALETTE) {
+      const b = button('', 'sw', () => choose(c));
+      b.style.setProperty('--c', c);
+      b.setAttribute('aria-label', `Color ${c}`);
+      b.title = c;
+      b.setAttribute('aria-pressed', String(selected === c));
+      swatches.append(b);
+    }
+    const colors = el('div');
+    colors.append(el('p', 'eyebrow', 'Colors'), swatches);
+
+    const well = el('label', 'well');
+    const picker = el('input');
+    picker.type = 'color';
+    picker.value = shown ?? PALETTE[1]!;
+    picker.setAttribute('aria-label', 'Custom color');
+    well.append(picker);
+    const hex = el('input');
+    hex.type = 'text';
+    hex.value = picker.value;
+    hex.spellcheck = false;
+    hex.setAttribute('aria-label', 'Custom HEX color');
+    picker.addEventListener('input', () => {
+      hex.value = picker.value;
+      hex.setCustomValidity('');
+    });
+    const applyHex = () => {
+      const v = normalizeHex(hex.value);
+      if (!v) {
+        hex.setCustomValidity('Use #rgb or #rrggbb');
+        hex.reportValidity();
+        return;
+      }
+      choose(v);
+    };
+    hex.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') applyHex();
+    });
+    const custom = el('div', 'custom');
+    custom.append(well, hex, button('Apply', 'btn primary', applyHex));
+    const customSec = el('div');
+    customSec.append(el('p', 'eyebrow', 'Custom'), custom);
+    body.append(colors, customSec);
+
+    if (shown) {
+      // Feature: show only chats with this color in the sidebar.
+      const f = button('', 'filter', () => {
+        pop.hidePopover();
+        apply('filter', shown);
+      });
+      const i = el('i');
+      i.style.setProperty('--c', shown);
+      f.append(i, 'Show only chats with this color');
+      body.append(f);
+    }
+
+    const foot = el('footer');
+    if (scope === 'group') {
+      foot.append(button(`Clear ${g?.kind} color`, 'btn ghost', () => choose(null)));
+    } else {
+      foot.append(button('Reset to automatic', 'btn ghost', () => choose(null)), button('Remove color', 'btn ghost', () => choose(NONE)));
+    }
+    pop.replaceChildren(head, body, foot);
+    return body;
+  };
+
+  const body = render();
   if (!pop.matches(':popover-open')) pop.showPopover();
   // Position after showing so the real height is known; flip above the row if it would overflow.
   const r = btn.getBoundingClientRect();

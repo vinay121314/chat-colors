@@ -29,6 +29,29 @@ export async function update(fn: (s: Settings) => void): Promise<Settings> {
   return s;
 }
 
+/**
+ * Sidebar filter: a #rrggbb color (show only chats with that color) or null. Stored apart from
+ * settings so it is never exported and a reset doesn't touch it.
+ */
+export const FILTER_KEY = 'crc:filter';
+
+export async function loadFilter(): Promise<string | null> {
+  const v = (await chrome.storage.local.get(FILTER_KEY))[FILTER_KEY];
+  return typeof v === 'string' && /^#[0-9a-f]{6}$/.test(v) ? v : null;
+}
+
+export async function saveFilter(v: string | null): Promise<void> {
+  await (v ? chrome.storage.local.set({ [FILTER_KEY]: v }) : chrome.storage.local.remove(FILTER_KEY));
+}
+
+export function onFilter(cb: (v: string | null) => void): void {
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local' || !(FILTER_KEY in changes)) return;
+    const v = changes[FILTER_KEY]?.newValue;
+    cb(typeof v === 'string' && /^#[0-9a-f]{6}$/.test(v) ? v : null);
+  });
+}
+
 export function onChange(cb: (s: Settings) => void): void {
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local' || !(KEY in changes)) return;

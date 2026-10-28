@@ -1,20 +1,24 @@
 // Content-script entry: wires the colorizer to chrome.storage and the popup.
-import { load, MSG_CURRENT, MSG_DIAG, onChange, update } from '../core/storage';
+import { load, loadFilter, MSG_CURRENT, MSG_DIAG, onChange, onFilter, saveFilter, update } from '../core/storage';
 import { diagnose } from './adapter';
 import { createColorizer } from './colorizer';
 
-const colorizer = createColorizer((id, value) => {
-  update((s) => {
-    if (value === null) delete s.overrides[id];
-    else s.overrides[id] = value;
-  }).catch(() => {
-    // Extension was reloaded/removed: this script is orphaned. Clean up and go quiet.
-    if (!chrome.runtime?.id) colorizer.stop();
-  });
+// Extension was reloaded/removed: this script is orphaned. Clean up and go quiet.
+const orphaned = () => {
+  if (!chrome.runtime?.id) colorizer.stop();
+};
+
+const colorizer = createColorizer({
+  write: (fn) => void update(fn).catch(orphaned),
+  setFilter: (v) => void saveFilter(v).catch(orphaned),
 });
 
-void load().then((s) => colorizer.update(s));
+void Promise.all([load(), loadFilter()]).then(([s, f]) => {
+  colorizer.setFilter(f);
+  colorizer.update(s);
+});
 onChange((s) => colorizer.update(s));
+onFilter((f) => colorizer.setFilter(f));
 
 chrome.runtime.onMessage.addListener((msg: unknown, _sender, reply) => {
   const type = (msg as { type?: string } | null)?.type;

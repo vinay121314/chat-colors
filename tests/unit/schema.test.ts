@@ -84,6 +84,22 @@ describe('migrate', () => {
     expect(s.categories[1]!.id).not.toBe('a');
   });
 
+  it('validates Project/GPT colors (key format, color), keeping names for display', () => {
+    const s = migrate({
+      groups: {
+        'g-p-0123456789abcdef': { color: '#ABC', name: '  Side project ' },
+        'g-AbCdEf123': { color: '#123456' },
+        'not-a-group': { color: '#123456', name: 'x' },
+        'g-p-zzzz': { color: '#123456' },
+        'g-AbCdEf999': { color: 'red' },
+      },
+    });
+    expect(s.groups).toEqual({
+      'g-p-0123456789abcdef': { color: '#aabbcc', name: 'Side project' },
+      'g-AbCdEf123': { color: '#123456', name: '' },
+    });
+  });
+
   it('keeps an explicitly empty category list (user deleted all)', () => {
     expect(migrate({ categories: [] }).categories).toEqual([]);
   });

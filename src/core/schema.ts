@@ -32,11 +32,20 @@ export interface Appearance {
   fill: number; // %, 5–40 (fill tint strength)
 }
 
+/** A color for every chat inside a Project or custom GPT. */
+export interface GroupColor {
+  color: string;
+  /** Display only (last seen sidebar name or URL slug); the key is the stable id. */
+  name: string;
+}
+
 export interface Settings {
   version: typeof SCHEMA_VERSION;
   enabled: boolean;
   /** Keyed by ChatGPT conversation UUID, never by title. */
   overrides: Record<string, Override>;
+  /** Keyed by Project (`g-p-<hex>`) or custom GPT (`g-<id>`) id from the URL, never by name. */
+  groups: Record<string, GroupColor>;
   /** Array order is rule priority. */
   categories: Category[];
   /** Color for chats with no override and no matching rule; NONE = no border. */
@@ -49,6 +58,11 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Conversation ids seen so far are UUIDs; accept any URL-safe token so an id-format change doesn't break us. */
 export const ID_PATTERN = '[A-Za-z0-9][A-Za-z0-9_-]{7,127}';
 const ID = new RegExp(`^${ID_PATTERN}$`);
+
+/** Project (`g-p-<hex>`) or custom GPT (`g-<alnum>`) id, without the name slug that follows it in URLs. */
+export const GROUP_PATTERN = 'g-p-[0-9a-f]{8,64}|g-[A-Za-z0-9]{6,64}';
+const GROUP = new RegExp(`^(?:${GROUP_PATTERN})$`);
+export const isGroupKey = (v: unknown): v is string => typeof v === 'string' && GROUP.test(v);
 
 /** Canonical form of a conversation id (UUIDs lowercased, others kept as-is), or null if invalid. */
 export function normalizeId(value: unknown): string | null {
@@ -87,6 +101,7 @@ export function defaultSettings(): Settings {
     version: SCHEMA_VERSION,
     enabled: true,
     overrides: {},
+    groups: {},
     categories: [
       cat('work', 'Work', '#16a34a'),
       cat('development', 'Development', '#2f7de1'),
@@ -152,6 +167,15 @@ export function migrate(raw: unknown): Settings {
       if (id && o) overrides[id] = o;
     }
   }
+  // Additive field (no version bump): older data simply has none.
+  const groups: Record<string, GroupColor> = {};
+  if (isObj(raw.groups)) {
+    for (const [k, v] of Object.entries(raw.groups)) {
+      const color = isObj(v) ? normalizeHex(v.color) : null;
+      if (!isGroupKey(k) || !color || !isObj(v)) continue;
+      groups[k] = { color, name: typeof v.name === 'string' ? v.name.trim().slice(0, 80) : '' };
+    }
+  }
   const seen = new Set<string>();
   const categories = Array.isArray(raw.categories)
     ? raw.categories.flatMap((c) => normCategory(c, seen) ?? [])
@@ -171,6 +195,7 @@ export function migrate(raw: unknown): Settings {
     version: SCHEMA_VERSION,
     enabled: typeof raw.enabled === 'boolean' ? raw.enabled : d.enabled,
     overrides,
+    groups,
     categories,
     fallback,
     appearance: {
@@ -191,7 +216,7 @@ export function parseImport(text: string): Settings {
   } catch {
     throw new Error('File is not valid JSON.');
   }
-  if (!isObj(raw) || !('categories' in raw || 'overrides' in raw)) {
+  if (!isObj(raw) || !('categories' in raw || 'overrides' in raw || 'groups' in raw)) {
     throw new Error('File is not a ChatGPT Recents Colorizer export.');
   }
   return migrate(raw);

@@ -1,4 +1,4 @@
-﻿// Loads the BUILT extension (dist/) into Chromium and runs it against a static fixture served at
+// Loads the BUILT extension (dist/) into Chromium and runs it against a static fixture served at
 // https://chatgpt.com via request interception. This proves extension wiring, not live-site compatibility.
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -99,7 +99,7 @@ test('colors rows by keyword rules, ignores non-conversation links, no layout sh
   expect(await shadowOf(p, ID.ts)).toContain(rgb('#2f7de1')); // Development
   expect(await shadowOf(p, ID.meeting)).toContain(rgb('#16a34a')); // Work
   expect(await shadowOf(p, ID.project)).toContain(rgb('#e03131')); // Project URL, "urgent"
-  expect(await p.locator('nav[aria-label="Sidebar"] [data-crc]').count()).toBe(0);
+  expect(await p.locator('nav[aria-label="Sidebar"] [data-crc]').evaluateAll((els) => els.map((e) => e.getAttribute('data-crc')))).toEqual(['group:g-p-0123456789abcdef0123456789abcdef']); // only the Project entry
 
   const rects = () => p.locator('#list a').evaluateAll((as) => as.map((a) => JSON.stringify(a.getBoundingClientRect())));
   const before = await rects();
@@ -219,7 +219,8 @@ test('popup <-> content messaging works without the tabs permission', async ({ c
     return { urlsVisible: hits.some((h) => h!.url !== undefined || h!.title !== undefined), replies: hits.map((h) => h!.r) };
   });
   expect(res.urlsVisible).toBe(false);
-  expect(res.replies).toEqual([{ id: ID.meeting, title: 'Client meeting notes' }]);
+  expect(res.replies).toHaveLength(1);
+  expect(res.replies[0]).toMatchObject({ id: ID.meeting, title: 'Client meeting notes', group: null });
 });
 
 test('bar stays visible above opaque row content (hover/selected backgrounds on children)', async ({ context }) => {
@@ -427,7 +428,7 @@ test.describe('fresh install (no stored settings)', () => {
 
   test('colors nothing and categorizes nothing; manual color still works; suggestions are opt-in', async ({ context, extId }) => {
     const p = await openChat(context);
-    await expect(p.locator('#ds-sidebar [data-crc]')).toHaveCount(8); // rows detected (controls injected)
+    await expect(p.locator('#ds-sidebar [data-crc]')).toHaveCount(9); // 8 chats + 1 Project entry (controls injected)
     await expect(p.locator('#ds-sidebar .crc-bar, #ds-sidebar .crc-fill')).toHaveCount(0); // nothing painted
 
     // Manual color applies to just that chat.
@@ -448,4 +449,110 @@ test.describe('fresh install (no stored settings)', () => {
     await expect.poll(() => shadowOf(p, ID.ts)).toContain('#2f7de1'); // "TypeScript" -> Development
     expect(await shadowOf(p, ID.plain)).toBe('none'); // uncategorized stays uncolored
   });
+});
+
+
+/** Popup opened as a tab, with "active tab" resolved to the ChatGPT tab (test-only patch, see conversation tab test). */
+async function openPopupForChat(context: BrowserContext, extId: string): Promise<Page> {
+  const popup = await context.newPage();
+  await popup.addInitScript(() => {
+    const query = chrome.tabs.query.bind(chrome.tabs);
+    chrome.tabs.query = (async (info: chrome.tabs.QueryInfo) => {
+      const all = await query({});
+      if (!info.active) return all;
+      for (const t of all) if (await chrome.tabs.sendMessage(t.id!, { type: 'crc:current' }).catch(() => null)) return [t];
+      return [];
+    }) as typeof chrome.tabs.query;
+  });
+  await popup.goto(`chrome-extension://${extId}/popup.html`);
+  return popup;
+}
+
+const PROJECT_CHAT = `/g/g-p-0123456789abcdef0123456789abcdef-side-project/c/${ID.project}`;
+const PROJECT_ENTRY = '#ds-sidebar [data-crc="group:g-p-0123456789abcdef0123456789abcdef"]';
+
+test('color a whole Project from the in-page picker (scope switch); chat override still wins', async ({ context }) => {
+  const p = await openChat(context);
+  const row = rowLoc(p, ID.project);
+  await row.hover();
+  await row.locator('.crc-btn').click();
+  const picker = p.locator('#crc-picker-host [popover]');
+  await picker.getByRole('button', { name: 'All in Project' }).click();
+  await expect(picker.locator('.title')).toHaveText('Side project'); // name from the sidebar entry
+  await picker.getByRole('button', { name: 'Color #b08900' }).click();
+  await expect.poll(() => shadowOf(p, ID.project)).toContain('#b08900'); // beats its "urgent" rule
+  await expect.poll(() => p.locator(PROJECT_ENTRY).evaluate((e) => (e as HTMLElement).style.getPropertyValue('--crc-c'))).toBe('#b08900');
+  expect(await shadowOf(p, ID.ts)).toContain('#2f7de1'); // other chats untouched
+
+  // A chat-level color still overrides the Project color.
+  await row.hover();
+  await row.locator('.crc-btn').click();
+  await expect(picker.getByRole('button', { name: 'This chat' })).toHaveAttribute('aria-pressed', 'true');
+  await picker.getByRole('button', { name: 'Color #9b5de5' }).click();
+  await expect.poll(() => shadowOf(p, ID.project)).toContain('#9b5de5');
+});
+
+test('color a Project from its own sidebar entry; listed in Rules tab', async ({ context, extId }) => {
+  const p = await openChat(context);
+  const entry = p.locator(PROJECT_ENTRY);
+  await entry.hover();
+  await entry.locator('.crc-btn').click();
+  const picker = p.locator('#crc-picker-host [popover]');
+  await expect(picker.locator('.eyebrow').first()).toHaveText('Project color');
+  await picker.getByRole('button', { name: 'Color #d6336c' }).click();
+  await expect.poll(() => shadowOf(p, ID.project)).toContain('#d6336c');
+
+  const popup = await openPopup(context, extId);
+  await tab(popup, 'Rules');
+  await expect(popup.locator('#groups-card')).toBeVisible();
+  await expect(popup.locator('.group-row')).toContainText('Side project');
+  await popup.getByRole('button', { name: 'Remove color for Side project' }).click();
+  await p.bringToFront();
+  await expect.poll(() => shadowOf(p, ID.project)).toContain('#e03131'); // back to its keyword rule
+});
+
+test('filter: from the picker, the sticky pill, and the popup chips', async ({ context, extId }) => {
+  const p = await openChat(context);
+  const visible = () => p.locator('#list [data-crc]:visible').count();
+  expect(await visible()).toBe(8);
+
+  // From the in-page picker: "Show only chats with this color".
+  const row = rowLoc(p, ID.ts);
+  await row.hover();
+  await row.locator('.crc-btn').click();
+  await p.locator('#crc-picker-host [popover]').getByRole('button', { name: 'Show only chats with this color' }).click();
+  const pill = p.locator('.crc-filterbar');
+  await expect(pill).toContainText('Showing Development · 1 chat');
+  await expect.poll(visible).toBe(1);
+
+  // Clear from the pill.
+  await pill.getByRole('button', { name: 'Clear color filter' }).click();
+  await expect(pill).toHaveCount(0);
+  await expect.poll(visible).toBe(8);
+
+  // From the popup's "Show in sidebar" chips (filter state is shared with every tab).
+  const popup = await openPopupForChat(context, extId);
+  const chips = popup.locator('.card', { hasText: 'Show in sidebar' });
+  await chips.getByRole('button', { name: /Work/ }).click();
+  await expect(chips.getByRole('button', { name: /Work/ })).toHaveAttribute('aria-pressed', 'true');
+  await p.bringToFront();
+  await expect.poll(visible).toBe(2); // "Client meeting notes" + "Weekly client report"
+  await expect(pill).toContainText('Showing Work · 2 chats');
+  await popup.bringToFront();
+  await chips.getByRole('button', { name: 'All chats' }).click();
+  await p.bringToFront();
+  await expect.poll(visible).toBe(8);
+});
+
+test('popup conversation tab: scope switch colors the whole Project', async ({ context, extId }) => {
+  const p = await openChat(context, PROJECT_CHAT);
+  const popup = await openPopupForChat(context, extId);
+  await expect(popup.locator('.convo-head .eyebrow')).toContainText('Project: Side project');
+  await popup.getByRole('radio', { name: 'All in Project' }).check();
+  await popup.getByRole('button', { name: 'Color #0e9fb3' }).click();
+  await expect(popup.locator('.badge')).toContainText('Project color · all its chats');
+  await p.bringToFront();
+  await expect.poll(() => shadowOf(p, ID.project)).toContain('#0e9fb3');
+  await popup.setViewportSize({ width: 380, height: 580 });
+  await popup.screenshot({ path: `${SHOTS}/popup-project-light.png` });
 });

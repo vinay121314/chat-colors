@@ -8,7 +8,9 @@ import {
   findRows,
   getTitle,
   maskPath,
+  parseChatGroup,
   parseConversationId,
+  parseGroupLink,
   rowBox,
   undecorate,
 } from '../../src/content/adapter';
@@ -44,6 +46,26 @@ describe('parseConversationId', () => {
     `//evil.example/c/${U}`,
     `/x/g/abc/c/${U}`,
   ])('%p -> null', (href) => expect(parseConversationId(href)).toBeNull());
+});
+
+describe('Project / GPT parsing', () => {
+  const P = 'g-p-0123456789abcdef0123456789abcdef';
+  it.each([
+    [`/g/${P}-my-side-project/c/${U}`, P, 'my side project'],
+    [`https://chatgpt.com/g/${P}/c/${U}`, P, ''],
+    [`/g/g-AbCdEf123-code-helper/c/${U}`, 'g-AbCdEf123', 'code helper'],
+  ])('chat %s belongs to %s', (href, key, slug) => expect(parseChatGroup(href)).toEqual({ key, slug }));
+
+  it('plain chats have no group', () => expect(parseChatGroup(`/c/${U}`)).toBeNull());
+
+  it.each([
+    [`/g/${P}-my-side-project/project`, P],
+    [`/g/g-AbCdEf123-code-helper`, 'g-AbCdEf123'],
+  ])('entry link %s -> %s', (href, key) => expect(parseGroupLink(href)?.key).toBe(key));
+
+  it.each(['/gpts', '/g/', '/g/x', `/g/${P}/c/${U}`, '/g/g-ab/project'])('%s is not an entry link', (href) =>
+    expect(parseGroupLink(href)).toBeNull(),
+  );
 });
 
 describe('discovery', () => {

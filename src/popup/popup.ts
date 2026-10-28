@@ -15,15 +15,23 @@ import {
 } from '../core/schema';
 
 const SLIDERS = ['fill', 'thickness', 'opacity', 'radius'] as const;
-import { MSG_CURRENT, MSG_DIAG, load, onChange, save, update } from '../core/storage';
+import { MSG_CURRENT, MSG_DIAG, load, onChange, onFilter, save, saveFilter, update } from '../core/storage';
 
-type Current = { id: string | null; title: string | null } | null;
+type Current = {
+  id: string | null;
+  title: string | null;
+  group: { key: string; name: string; kind: string } | null;
+  legend: { color: string; label: string; count: number }[];
+  filter: string | null;
+} | null;
 type Diag = { rows: number; root: string | null; [k: string]: unknown } | null;
 
 let s: Settings;
 let current: Current = null;
 let diag: Diag = null;
 const expanded = new Set<string>();
+/** Conversation tab: color this chat only, or its whole Project/GPT. */
+let scope: 'chat' | 'group' = 'chat';
 
 const $ = <T extends HTMLElement = HTMLInputElement>(id: string) => document.getElementById(id) as T;
 
@@ -107,8 +115,32 @@ function renderStatus(): void {
 
 // ------------------------------------------------------------------ Conversation tab
 
+function renderFilter(): HTMLElement | null {
+  if (!current || (!current.legend.length && !current.filter)) return null;
+  const chip = (label: string, color: string | null, count: number | null, active: boolean, key: string) => {
+    const b = btn('', () => void saveFilter(color), { cls: 'chip', key });
+    if (color) b.append(colorVar(h('i'), color));
+    b.append(h('span', { textContent: label }));
+    if (count !== null) b.append(h('span', { cls: 'n', textContent: String(count) }));
+    b.setAttribute('aria-pressed', String(active));
+    return b;
+  };
+  return h(
+    'div',
+    { cls: 'card' },
+    h('p', { cls: 'eyebrow', textContent: 'Show in sidebar' }),
+    h(
+      'div',
+      { cls: 'chips' },
+      chip('All chats', null, null, !current.filter, 'flt:all'),
+      ...current.legend.map((l) => chip(l.label, l.color, l.count, current!.filter === l.color, `flt:${l.color}`)),
+    ),
+  );
+}
+
 function renderCurrent(): void {
   const box = $('current');
+  const filterCard = renderFilter();
   if (!current?.id) {
     const empty = h(
       'div',
@@ -122,43 +154,84 @@ function renderCurrent(): void {
           : 'Open chatgpt.com in this tab. Rules and style can be edited from the other tabs.',
       }),
     );
-    box.replaceChildren(empty);
+    box.replaceChildren(...(filterCard ? [filterCard] : []), empty);
     return;
   }
   const id = current.id;
-  const r = resolveColor(id, current.title ?? '', s);
-  const manual = r.source === 'manual' ? r.color : null;
+  const g = current.group;
+  if (!g) scope = 'chat';
+  const r = resolveColor(id, current.title ?? '', s, g?.key);
+  const groupColor = g ? (s.groups[g.key]?.color ?? null) : null;
+  const selected = scope === 'group' ? groupColor : r.source === 'manual' ? r.color : null;
+  const shown = scope === 'group' ? groupColor : r.color;
+  const apply = (v: string | null) => {
+    if (scope === 'group' && g) {
+      commit((x) => {
+        if (v === null) delete x.groups[g.key];
+        else x.groups[g.key] = { color: v, name: g.name };
+      });
+    } else {
+      setOverride(id, v);
+    }
+  };
+
   const badgeText =
-    r.source === 'manual'
-      ? r.color
-        ? 'Manual color'
-        : 'Manually uncolored'
-      : current.title === null
-        ? 'Automatic · title not in sidebar'
-        : r.source === 'rule'
-          ? `Automatic · ${r.category?.name}`
-          : 'Automatic · Uncategorized';
+    scope === 'group'
+      ? groupColor
+        ? `${g!.kind} color · all its chats`
+        : `No ${g!.kind} color`
+      : r.source === 'manual'
+        ? r.color
+          ? 'Manual color'
+          : 'Manually uncolored'
+        : r.source === 'group'
+          ? `From ${g!.kind} · ${g!.name}`
+          : current.title === null
+            ? 'Automatic · title not in sidebar'
+            : r.source === 'rule'
+              ? `Automatic · ${r.category?.name}`
+              : 'No color';
 
   const head = h(
     'div',
     { cls: 'convo-head' },
-    colorVar(h('span', { cls: 'convo-bar' }), r.color),
+    colorVar(h('span', { cls: 'convo-bar' }), shown),
     h(
       'div',
       { cls: 'grow' },
-      h('p', { cls: 'eyebrow', textContent: 'Open conversation' }),
+      h('p', { cls: 'eyebrow', textContent: g ? `Open conversation · ${g.kind}: ${g.name}` : 'Open conversation' }),
       h('p', { cls: 'convo-title', textContent: current.title ?? 'Untitled conversation' }),
-      h('span', { cls: 'badge' }, colorVar(h('i'), r.color), badgeText),
+      h('span', { cls: 'badge' }, colorVar(h('i'), shown), badgeText),
     ),
   );
+
+  const scopeSwitch = g
+    ? h(
+        'div',
+        { cls: 'segmented two', role: 'radiogroup', label: 'Apply color to' },
+        ...(
+          [
+            ['chat', 'This chat'],
+            ['group', `All in ${g.kind}`],
+          ] as const
+        ).map(([sc, label]) => {
+          const input = h('input', { type: 'radio', name: 'scope', value: sc, checked: scope === sc, key: `scope:${sc}` });
+          input.onchange = () => {
+            scope = sc;
+            render();
+          };
+          return h('label', {}, input, h('span', { textContent: label }));
+        }),
+      )
+    : null;
 
   const chips = h(
     'div',
     { cls: 'chips' },
     ...s.categories.map((c) => {
-      const b = btn('', () => setOverride(id, c.color), { cls: 'chip', key: `cur:cat:${c.id}` });
+      const b = btn('', () => apply(c.color), { cls: 'chip', key: `cur:cat:${c.id}` });
       b.append(colorVar(h('i'), c.color), h('span', { textContent: c.name }));
-      b.setAttribute('aria-pressed', String(manual === c.color));
+      b.setAttribute('aria-pressed', String(selected === c.color));
       return b;
     }),
   );
@@ -166,51 +239,92 @@ function renderCurrent(): void {
     'div',
     { cls: 'swatches' },
     ...PALETTE.map((c) => {
-      const b = btn('', () => setOverride(id, c), { cls: 'sw', title: c, label: `Color ${c}`, key: `cur:sw:${c}` });
-      b.setAttribute('aria-pressed', String(manual === c));
+      const b = btn('', () => apply(c), { cls: 'sw', title: c, label: `Color ${c}`, key: `cur:sw:${c}` });
+      b.setAttribute('aria-pressed', String(selected === c));
       return colorVar(b, c);
     }),
   );
 
-  const initial = r.color ?? PALETTE[1]!;
+  const initial = shown ?? PALETTE[1]!;
   const picker = h('input', { type: 'color', value: initial, label: 'Custom color', key: 'cur:picker' });
   const hex = h('input', { type: 'text', value: initial, label: 'Custom HEX color', spellcheck: false, key: 'cur:hex', cls: 'mono' });
   picker.oninput = () => {
     hex.value = picker.value;
     hex.setCustomValidity('');
   };
-  const apply = () => {
+  const applyHex = () => {
     const v = normalizeHex(hex.value);
     if (!v) {
       hex.setCustomValidity('Use #rgb or #rrggbb');
       hex.reportValidity();
       return;
     }
-    setOverride(id, v);
+    apply(v);
   };
   hex.onkeydown = (e) => {
-    if (e.key === 'Enter') apply();
+    if (e.key === 'Enter') applyHex();
   };
+
+  const actions =
+    scope === 'group'
+      ? [btn(`Clear ${g!.kind} color`, () => apply(null), { cls: 'btn ghost', key: 'cur:reset' })]
+      : [
+          btn('Reset to automatic', () => apply(null), { cls: 'btn ghost', key: 'cur:reset' }),
+          btn('Remove color', () => setOverride(id, NONE), { cls: 'btn ghost', key: 'cur:none' }),
+        ];
 
   const card = h(
     'div',
     { cls: 'card' },
+    ...(scopeSwitch ? [scopeSwitch] : []),
     ...(s.categories.length ? [h('div', {}, h('p', { cls: 'eyebrow', textContent: 'Categories' }), chips)] : []),
     h('div', {}, h('p', { cls: 'eyebrow', textContent: 'Colors' }), swatches),
     h(
       'div',
       {},
       h('p', { cls: 'eyebrow', textContent: 'Custom' }),
-      h('div', { cls: 'custom' }, h('label', { cls: 'well' }, picker), hex, btn('Apply', apply, { cls: 'btn primary', key: 'cur:apply' })),
+      h('div', { cls: 'custom' }, h('label', { cls: 'well' }, picker), hex, btn('Apply', applyHex, { cls: 'btn primary', key: 'cur:apply' })),
     ),
-    h(
-      'div',
-      { cls: 'actions' },
-      btn('Reset to automatic', () => setOverride(id, null), { cls: 'btn ghost', key: 'cur:reset' }),
-      btn('Remove color', () => setOverride(id, NONE), { cls: 'btn ghost', key: 'cur:none' }),
-    ),
+    h('div', { cls: 'actions' }, ...actions),
   );
-  box.replaceChildren(h('div', { cls: 'card' }, head), card);
+  box.replaceChildren(h('div', { cls: 'card' }, head), card, ...(filterCard ? [filterCard] : []));
+}
+
+function renderGroups(): void {
+  const entries = Object.entries(s.groups);
+  $('groups-card').hidden = entries.length === 0;
+  $('groups').replaceChildren(
+    ...entries.map(([key, gc]) => {
+      const color = h('input', { type: 'color', value: gc.color, label: `${gc.name || key} color`, key: `g:${key}:color` });
+      color.onchange = () =>
+        commit((x) => {
+          const e = x.groups[key];
+          if (e) e.color = color.value;
+        });
+      return h(
+        'li',
+        { cls: 'group-row' },
+        h('label', { cls: 'well sm' }, color),
+        h(
+          'div',
+          { cls: 'grow' },
+          h('p', { cls: 'label', textContent: gc.name || key }),
+          h('p', { cls: 'sub', textContent: key.startsWith('g-p-') ? 'Project · all chats' : 'Custom GPT · all chats' }),
+        ),
+        h(
+          'button',
+          {
+            type: 'button',
+            cls: 'icon-btn danger',
+            label: `Remove color for ${gc.name || key}`,
+            key: `g:${key}:rm`,
+            onclick: () => commit((x) => delete x.groups[key]),
+          },
+          icon(I.trash),
+        ),
+      );
+    }),
+  );
 }
 
 // ------------------------------------------------------------------ Rules tab
@@ -413,6 +527,7 @@ function render(): void {
   for (const r of document.querySelectorAll<HTMLInputElement>('input[name="mode"]')) r.checked = r.value === s.appearance.mode;
   renderStatus();
   renderCurrent();
+  renderGroups();
   renderCategories();
   renderTest();
   renderPreview();
@@ -530,9 +645,15 @@ async function init(): Promise<void> {
   [s, current, diag] = await Promise.all([load(), ask<Current>(MSG_CURRENT), ask<Diag>(MSG_DIAG)]);
   wire();
   render();
-  onChange((next) => {
+  onChange(async (next) => {
     if (JSON.stringify(next) === JSON.stringify(s)) return; // our own echo
     s = next;
+    current = (await ask<Current>(MSG_CURRENT)) ?? current; // colors in use may have changed
+    render();
+  });
+  onFilter(async (f) => {
+    if (current) current.filter = f;
+    current = (await ask<Current>(MSG_CURRENT)) ?? current;
     render();
   });
 }
