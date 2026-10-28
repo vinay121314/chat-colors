@@ -4,9 +4,9 @@ A small Chrome extension (Manifest V3) that adds colored left borders to convers
 
 > **Live ChatGPT compatibility: see [QA status](#qa-status).** Automated tests run against fixture pages, not the live site.
 
-| Sidebar (fixture mock-up, light) | Sidebar (fixture mock-up, dark) | Popup (dark) |
+| In-page picker (dark) | Popup: conversation | Popup: rules |
 |---|---|---|
-| ![](docs/screenshots/fixture-sidebar-light.png) | ![](docs/screenshots/fixture-sidebar-dark.png) | ![](docs/screenshots/popup-dark.png) |
+| ![](docs/screenshots/picker-dark.png) | ![](docs/screenshots/popup-conversation-light.png) | ![](docs/screenshots/popup-rules-dark.png) |
 
 *Screenshots are from the test fixture page with synthetic titles, captured by the Playwright suite. They are not screenshots of chatgpt.com.*
 
@@ -16,7 +16,8 @@ A small Chrome extension (Manifest V3) that adds colored left borders to convers
 - **Automatic categories.** Starter categories are Work, Development, AI Tools, Personal, Urgent, Research, and Uncategorized as a fallback. You can create, rename, delete, recolor and reorder them. Keywords are case-insensitive, each one can be enabled or disabled, and a *Test a title* box previews which category matches.
 - **Precedence:** a manual color first, then the first matching enabled rule in priority order, then the fallback color.
 - **Stable IDs.** Colors are keyed by the conversation UUID from the URL, including Project and custom-GPT chats, so renaming a chat keeps its manual color while automatic colors update.
-- **Appearance:** border thickness (2–6 px), opacity, radius, and a global on/off switch. There is no layout shift, because the border is an inset shadow. Respects `prefers-reduced-motion`.
+- **Appearance:** bar thickness (2–6 px), opacity, roundness, a live preview, and a global on/off switch. The bar is the extension's own overlay element, so there's no layout shift and ChatGPT's row styles are never changed. Respects `prefers-reduced-motion`.
+- **Troubleshooting:** the popup's header shows how many chats were detected. *Data → Copy diagnostics* produces a structure-only report (no titles, ids masked) for bug reports.
 - **Import/export** settings as JSON, with validation.
 - **Private by design:** only the `storage` permission, runs only on `chatgpt.com`, no network requests. See [PRIVACY.md](PRIVACY.md).
 
@@ -36,12 +37,13 @@ Requires Chrome 114 or later. After rebuilding, click the reload icon on the ext
 
 ## Usage
 
-- **Color one chat:** hover a sidebar conversation, or Tab to it, then click the small circle near the right edge and pick a color. Clicking the circle never opens the chat.
-- **Popup → Current conversation:** colors the conversation open in the current tab.
-- **Popup → Categories & keyword rules:** edit names and colors, add keywords (comma-separated, Enter to add), toggle individual keywords or whole categories, and use ↑/↓ to change priority.
-- **Uncategorized:** sets the fallback color, or *No border*.
-- **Appearance:** sliders apply live to every open ChatGPT tab.
-- **Import / export:** JSON backup. An invalid file is rejected without changing anything.
+- **Color one chat:** hover a sidebar conversation, or Tab to it, then click the small dot near the right edge and pick a category, a color, or a custom HEX. Clicking the dot never opens the chat.
+- **Popup → Conversation:** colors the conversation open in the current tab.
+- **Popup → Rules:** expand a category to rename it, add keywords (comma-separated, Enter to add), click a keyword chip to toggle it, or use ↑/↓ to change priority. *Test a title* previews the match. *Uncategorized* sets the fallback color or turns its border off.
+- **Popup → Style:** sliders apply live to every open ChatGPT tab.
+- **Popup → Data:** JSON export/import (an invalid file is rejected without changing anything), diagnostics, and reset.
+
+**If no colors appear:** the header should read "N chats detected". If it says "Sidebar not recognized", open *Data → Copy diagnostics* and include the report in an issue.
 
 ## Privacy
 
@@ -53,7 +55,6 @@ The extension reads only sidebar conversation links and their visible titles. It
 - Rules match only titles **visible in the sidebar**. Conversations that haven't been loaded by scrolling yet aren't classified until they appear.
 - When the sidebar is collapsed (or on mobile layouts), there are no rows to color. The popup still works for the open conversation.
 - The in-row control's position is chosen so it clears ChatGPT's own row menu. That offset is tuned for the fixture and may need adjusting on the live site.
-- The in-page picker follows the OS light/dark preference, not ChatGPT's in-app theme setting.
 - There is no extension icon yet, so Chrome shows a default letter icon.
 
 ## Development

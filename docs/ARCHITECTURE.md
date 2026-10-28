@@ -32,7 +32,7 @@ Layering: `core` knows nothing about the DOM or ChatGPT. `adapter` knows nothing
 ## Decoration
 
 - `data-crc="<id>"` marks a row. `data-crc-color` plus a `--crc-c` custom property sets the color.
-- The border is an `inset box-shadow`, so the box size is unchanged and there is no layout shift. Thickness, opacity and radius are `:root` variables in one `<style id="crc-vars">`.
+- The color is drawn by our own `<span class="crc-bar">`, absolutely positioned at the row's left edge with `z-index: 2` and `pointer-events: none`. An earlier inset `box-shadow` on the row was invisible whenever a child of the row painted an opaque background, which is common in hover and selected states. The bar paints above those backgrounds, never takes clicks, causes no layout shift, and doesn't change ChatGPT's own row styles. A row that was `position: static` gets `position: relative`, which has no visual effect by itself. Thickness, opacity and radius are `:root` variables in one `<style id="crc-vars">`.
 - The control is a `<button>` absolutely positioned inside the row, visible on hover and focus. Its click events call `preventDefault` and `stopPropagation`, so the anchor doesn't navigate and ChatGPT's root-delegated handlers never see the click.
 - Disable or cleanup removes every attribute, class, button and style that was added.
 
@@ -50,4 +50,11 @@ Layering: `core` knows nothing about the DOM or ChatGPT. `adapter` knows nothing
 
 ## When ChatGPT changes its DOM
 
-Edit `ROOT_SELECTORS` and `CONV_PATH` in `src/content/adapter.ts`, then update `tests/fixtures/*`. If no root matches, the extension does nothing. It never falls back to guessing among arbitrary links on the page.
+Root discovery (`findRoot`):
+1. Use a known container (`#ds-sidebar`, the history nav and similar) if it holds conversation links.
+2. Otherwise use the `<aside>` or outermost navigation landmark around the first conversation link. Links in message bodies are never inside navigation, so they're never picked.
+3. While zero rows are found, the root observer keeps re-checking. This covers a list that renders late or somewhere unexpected.
+
+Conversation ids accept any URL-safe token (UUIDs are lowercased), so an id-format change doesn't break detection.
+
+If it still breaks: get the report from *Data → Copy diagnostics* (`adapter.diagnose()`, structure only), then edit `ROOT_SELECTORS` and `CONV_PATH` in `src/content/adapter.ts` and update `tests/fixtures/*`.

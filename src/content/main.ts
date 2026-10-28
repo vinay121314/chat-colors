@@ -1,5 +1,6 @@
 // Content-script entry: wires the colorizer to chrome.storage and the popup.
-import { load, MSG_CURRENT, onChange, update } from '../core/storage';
+import { load, MSG_CURRENT, MSG_DIAG, onChange, update } from '../core/storage';
+import { diagnose } from './adapter';
 import { createColorizer } from './colorizer';
 
 const colorizer = createColorizer((id, value) => {
@@ -16,5 +17,7 @@ void load().then((s) => colorizer.update(s));
 onChange((s) => colorizer.update(s));
 
 chrome.runtime.onMessage.addListener((msg: unknown, _sender, reply) => {
-  if ((msg as { type?: string } | null)?.type === MSG_CURRENT) reply(colorizer.current());
+  const type = (msg as { type?: string } | null)?.type;
+  if (type === MSG_CURRENT) reply(colorizer.current());
+  else if (type === MSG_DIAG) reply({ version: chrome.runtime.getManifest().version, ...diagnose() });
 });

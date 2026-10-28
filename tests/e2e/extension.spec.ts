@@ -1,4 +1,4 @@
-// Loads the BUILT extension (dist/) into Chromium and runs it against a static fixture served at
+﻿// Loads the BUILT extension (dist/) into Chromium and runs it against a static fixture served at
 // https://chatgpt.com via request interception. This proves extension wiring, not live-site compatibility.
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -13,7 +13,6 @@ const ID = {
   plain: '44444444-4444-4444-8444-444444444444',
   project: '55555555-5555-4555-8555-555555555555',
 };
-/** Expected computed box-shadow fragment: "#rrggbb <thickness>px inset" in normalised form. */
 const rgb = (hex: string) => hex.toLowerCase();
 
 const test = base.extend<{ context: BrowserContext; extId: string }>({
@@ -51,19 +50,30 @@ async function openChat(context: BrowserContext, path = `/c/${ID.ts}`): Promise<
   return p;
 }
 const rowLoc = (p: Page, id: string) => p.locator(`#ds-sidebar a[data-crc="${id}"]`);
-// Computed box-shadow, with the color normalised to #rrggbb (Chromium reports color-mix() as "color(srgb r g b)").
+/**
+ * What the user actually sees: the rendered bar's color as #rrggbb plus its size ("#2f7de1 4px"),
+ * or "none" when the row has no bar or it isn't painted.
+ */
 const shadowOf = (p: Page, id: string) =>
   rowLoc(p, id).evaluate((a) => {
-    const s = getComputedStyle(a).boxShadow;
-    const hex = (n: number[]) => '#' + n.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
-    return s
-      .replace(/color\(srgb ([\d.]+) ([\d.]+) ([\d.]+)\)/, (_, r, g, b) => hex([r, g, b].map((v: string) => +v * 255)))
-      .replace(/rgba?\((\d+), (\d+), (\d+)\)/, (_, r, g, b) => hex([+r, +g, +b]));
+    const bar = a.querySelector(':scope > .crc-bar');
+    if (!bar) return 'none';
+    const cs = getComputedStyle(bar);
+    const r = bar.getBoundingClientRect();
+    if (cs.display === 'none' || r.width === 0 || r.height === 0) return 'none';
+    const m = cs.backgroundColor.match(/[\d.]+/g)!.map(Number);
+    const hex = '#' + m.slice(0, 3).map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
+    return `${hex} ${Math.round(r.width)}px`;
   });
+const tab = async (popup: Page, name: string) => popup.getByRole('tab', { name }).click();
+const expand = async (popup: Page, name: string) => {
+  const t = popup.locator('#categories .cat-toggle', { hasText: name });
+  if ((await t.getAttribute('aria-expanded')) !== 'true') await t.click();
+};
 const openPopup = async (context: BrowserContext, extId: string) => {
   const p = await context.newPage();
   await p.goto(`chrome-extension://${extId}/popup.html`);
-  await p.locator('#categories li').first().waitFor();
+  await p.locator('#categories li').first().waitFor({ state: 'attached' });
   return p;
 };
 const stored = (popup: Page) =>
@@ -103,6 +113,7 @@ test('in-row control: no navigation, manual color persists across reload and ren
   const popup = await openPopup(context, extId);
   expect((await stored(popup))?.overrides[ID.plain]).toBe('#e03131');
 
+  await p.bringToFront(); // background tabs get no animation frames; a user would be looking at this tab
   await p.reload();
   await rowLoc(p, ID.plain).waitFor({ state: 'attached' });
   expect(await shadowOf(p, ID.plain)).toContain(rgb('#e03131'));
@@ -196,33 +207,80 @@ test('popup <-> content messaging works without the tabs permission', async ({ c
   expect(res.replies).toEqual([{ id: ID.meeting, title: 'Client meeting notes' }]);
 });
 
+test('bar stays visible above opaque row content (hover/selected backgrounds on children)', async ({ context }) => {
+  const p = await openChat(context);
+  // Simulate a row whose inner content paints an opaque background over the whole row.
+  await p.addStyleTag({ content: '#list .row .truncate { position: absolute; inset: 0; background: #ff00ff; }' });
+  const hit = await rowLoc(p, ID.ts).evaluate((a) => {
+    const bar = a.querySelector<HTMLElement>(':scope > .crc-bar')!;
+    // The bar is pointer-events:none (never steals clicks); enable hit-testing only to probe paint order.
+    bar.style.setProperty('pointer-events', 'auto', 'important');
+    const r = bar.getBoundingClientRect();
+    const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.className;
+    bar.style.removeProperty('pointer-events');
+    return top;
+  });
+  expect(hit).toBe('crc-bar');
+});
+
+test('diagnostics report is structural only', async ({ context, extId }) => {
+  await openChat(context);
+  const popup = await openPopup(context, extId);
+  const d = await popup.evaluate(async () => {
+    const tabs = await chrome.tabs.query({});
+    for (const t of tabs) {
+      const r = await chrome.tabs.sendMessage(t.id!, { type: 'crc:diag' }).catch(() => null);
+      if (r) return r;
+    }
+    return null;
+  });
+  expect(d.rows).toBe(7);
+  expect(d.colored).toBe(7);
+  const text = JSON.stringify(d);
+  expect(text).not.toMatch(/TypeScript|meeting|recipe|checklist|summary/i);
+  expect(text).not.toContain(ID.ts);
+});
+
 test('popup: categories, rules, preview, priority, appearance, import/export', async ({ context, extId }) => {
   const p = await openChat(context);
   const popup = await openPopup(context, extId);
   popup.on('dialog', (d) => d.accept());
+  await tab(popup, 'Rules');
 
   await popup.locator('#test-title').fill('Weekly CLIENT sync');
-  await expect(popup.locator('#test-result')).toHaveText('Matches: Work');
+  await expect(popup.locator('#test-result')).toHaveText('Work');
 
+  await expand(popup, 'Personal');
   const addPersonal = popup.getByRole('textbox', { name: 'Add keyword to Personal' });
   await addPersonal.fill('hello, greetings');
   await addPersonal.press('Enter');
   await expect.poll(() => shadowOf(p, ID.plain)).toContain(rgb('#e8590c'));
-  await popup.locator('#categories > li', { hasText: 'greetings' }).getByRole('checkbox', { name: 'hello' }).uncheck();
+  const hello = popup.locator('#categories > li', { hasText: 'greetings' }).getByRole('checkbox', { name: 'hello' });
+  await popup.locator('.kw label', { hasText: 'hello' }).click(); // users click the chip, the checkbox is visually hidden
+  await expect(hello).not.toBeChecked();
   await expect.poll(() => shadowOf(p, ID.plain)).toContain(rgb('#8a8a8a'));
 
   // Priority: "Urgent launch checklist" matches Work (above Urgent) once 'launch' is added; then move Urgent up.
+  await expand(popup, 'Work');
   const addWork = popup.getByRole('textbox', { name: 'Add keyword to Work' });
   await addWork.fill('launch');
   await addWork.press('Enter');
   await expect.poll(() => shadowOf(p, ID.project)).toContain(rgb('#16a34a'));
+  await expand(popup, 'Urgent');
   const up = popup.getByRole('button', { name: 'Move Urgent up' });
   while (!(await up.isDisabled())) await up.click();
   await expect.poll(() => shadowOf(p, ID.project)).toContain(rgb('#e03131'));
 
-  await popup.locator('#thickness').fill('2');
-  await expect.poll(() => shadowOf(p, ID.ts)).toMatch(/inset 2px|2px 0px 0px 0px inset/);
+  // Uncategorized border off
+  await popup.getByRole('switch', { name: 'Show border for uncategorized chats' }).uncheck();
+  await expect.poll(() => shadowOf(p, ID.plain)).toBe('none');
 
+  await tab(popup, 'Style');
+  await popup.locator('#thickness').fill('2');
+  await expect.poll(() => shadowOf(p, ID.ts)).toBe('#2f7de1 2px');
+  await expect(popup.locator('#preview b').first()).toHaveCSS('width', '2px');
+
+  await tab(popup, 'Data');
   const [download] = await Promise.all([popup.waitForEvent('download'), popup.locator('#export').click()]);
   const exported = JSON.parse(readFileSync((await download.path())!, 'utf8'));
   expect(exported.version).toBe(1);
@@ -233,23 +291,77 @@ test('popup: categories, rules, preview, priority, appearance, import/export', a
   exported.appearance.thickness = 6;
   await popup.locator('#import').setInputFiles({ name: 'ok.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(exported)) });
   await expect(popup.locator('#io-status')).toHaveText('Imported.');
-  await expect.poll(() => shadowOf(p, ID.ts)).toMatch(/inset 6px|6px 0px 0px 0px inset/);
+  await expect.poll(() => shadowOf(p, ID.ts)).toBe('#2f7de1 6px');
+});
+
+test('popup tabs are keyboard navigable', async ({ context, extId }) => {
+  const popup = await openPopup(context, extId);
+  await popup.getByRole('tab', { name: 'Conversation' }).focus();
+  await popup.keyboard.press('ArrowRight');
+  await expect(popup.getByRole('tab', { name: 'Rules' })).toHaveAttribute('aria-selected', 'true');
+  await expect(popup.locator('#panel-rules')).toBeVisible();
+  for (const other of ['#panel-chat', '#panel-style', '#panel-data']) await expect(popup.locator(other)).toBeHidden();
+  await popup.keyboard.press('ArrowLeft');
+  await popup.keyboard.press('ArrowLeft');
+  await expect(popup.getByRole('tab', { name: 'Data' })).toBeFocused();
 });
 
 for (const scheme of ['light', 'dark'] as const) {
-  test(`${scheme} theme: popup themed, borders visible (screenshots)`, async ({ context, extId }) => {
+  test(`${scheme} theme: popup + picker themed, bars visible (screenshots)`, async ({ context, extId }) => {
     const p = await openChat(context);
     await p.emulateMedia({ colorScheme: scheme });
-    await p.setViewportSize({ width: 900, height: 420 });
+    await p.setViewportSize({ width: 640, height: 460 });
     expect(await shadowOf(p, ID.ts)).toContain(rgb('#2f7de1'));
     await rowLoc(p, ID.meeting).hover();
     await p.locator('#ds-sidebar').screenshot({ path: `${SHOTS}/fixture-sidebar-${scheme}.png` });
 
+    // In-page picker follows the page's actual background.
+    await rowLoc(p, ID.meeting).locator('.crc-btn').click();
+    const picker = p.locator('#crc-picker-host [popover]');
+    await expect(picker).toHaveAttribute('data-theme', scheme);
+    await p.screenshot({ path: `${SHOTS}/picker-${scheme}.png` });
+    await p.keyboard.press('Escape');
+
     const popup = await openPopup(context, extId);
     await popup.emulateMedia({ colorScheme: scheme });
-    await popup.setViewportSize({ width: 360, height: 900 });
+    await popup.setViewportSize({ width: 380, height: 580 });
     const bg = await popup.evaluate(() => getComputedStyle(document.body).backgroundColor);
-    expect(bg).toBe(scheme === 'dark' ? 'rgb(23, 24, 27)' : 'rgb(255, 255, 255)');
-    await popup.screenshot({ path: `${SHOTS}/popup-${scheme}.png`, fullPage: true });
+    expect(bg).toBe(scheme === 'dark' ? 'rgb(17, 17, 19)' : 'rgb(255, 255, 255)');
+    for (const name of ['Rules', 'Style', 'Data'] as const) {
+      await tab(popup, name);
+      if (name === 'Rules') await expand(popup, 'Development');
+      await popup.screenshot({ path: `${SHOTS}/popup-${name.toLowerCase()}-${scheme}.png` });
+    }
   });
 }
+
+for (const scheme of ['light', 'dark'] as const) {
+  test(`popup conversation tab with a ChatGPT tab active (${scheme})`, async ({ context, extId }) => {
+    const p = await openChat(context, `/c/${ID.meeting}`);
+    const popup = await context.newPage();
+    // Test-only: a real action popup's "active tab" is the ChatGPT tab. A popup opened as a tab can't
+    // reproduce that, so make the active-tab query resolve to whichever tab runs our content script.
+    await popup.addInitScript(() => {
+      const query = chrome.tabs.query.bind(chrome.tabs);
+      chrome.tabs.query = (async (info: chrome.tabs.QueryInfo) => {
+        const all = await query({});
+        if (!info.active) return all;
+        for (const t of all) if (await chrome.tabs.sendMessage(t.id!, { type: 'crc:current' }).catch(() => null)) return [t];
+        return [];
+      }) as typeof chrome.tabs.query;
+    });
+    await popup.emulateMedia({ colorScheme: scheme });
+    await popup.setViewportSize({ width: 380, height: 580 });
+    await popup.goto(`chrome-extension://${extId}/popup.html`);
+    await expect(popup.locator('.convo-title')).toHaveText('Client meeting notes');
+    await expect(popup.locator('#status')).toHaveAttribute('data-tone', 'ok');
+    await expect(popup.locator('#status')).toContainText('7 chats detected');
+    await expect(popup.locator('.badge')).toContainText('Automatic · Work');
+    await popup.screenshot({ path: `${SHOTS}/popup-conversation-${scheme}.png` });
+
+    await popup.getByRole('button', { name: 'Color #9b5de5' }).click();
+    await expect.poll(() => shadowOf(p, ID.meeting)).toContain('#9b5de5');
+    await expect(popup.locator('.badge')).toContainText('Manual color');
+  });
+}
+

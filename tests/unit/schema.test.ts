@@ -32,9 +32,16 @@ describe('migrate', () => {
 
   it('drops invalid overrides (bad id, bad color) and keeps NONE', () => {
     const s = migrate({
-      overrides: { [ID]: 'none', 'not-a-uuid': '#ff0000', [ID.replace('1', '2')]: 'blue', [ID.toUpperCase().replace('1', '3')]: '#ABC' },
+      overrides: {
+        [ID]: 'none',
+        'bad id!': '#ff0000',
+        short: '#ff0000',
+        [ID.replace('1', '2')]: 'blue',
+        [ID.toUpperCase().replace('1', '3')]: '#ABC',
+        'Tok_en-12345': '#000',
+      },
     });
-    expect(s.overrides).toEqual({ [ID]: NONE, [ID.replace('1', '3')]: '#aabbcc' });
+    expect(s.overrides).toEqual({ [ID]: NONE, [ID.replace('1', '3')]: '#aabbcc', 'Tok_en-12345': '#000000' });
   });
 
   it('drops invalid categories and rules, dedupes ids, keeps order', () => {

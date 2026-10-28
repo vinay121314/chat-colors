@@ -126,7 +126,7 @@ describe('colorizer on fixture sidebar', () => {
     mountPage();
     const s = start();
     c.update({ ...s, appearance: { thickness: 2, opacity: 50, radius: 0 } });
-    expect(document.getElementById('crc-vars')!.textContent).toBe(':root{--crc-w:2px;--crc-o:50%;--crc-r:0px}');
+    expect(document.getElementById('crc-vars')!.textContent).toBe(':root{--crc-w:2px;--crc-o:0.5;--crc-r:0px}');
   });
 
   it('manual NONE and fallback NONE leave rows uncolored but still controllable', () => {

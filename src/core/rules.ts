@@ -1,4 +1,4 @@
-import { NONE, type Category, type Settings } from './schema';
+import { NONE, normalizeId, type Category, type Settings } from './schema';
 
 export type Source = 'manual' | 'rule' | 'fallback';
 
@@ -19,7 +19,7 @@ export function matchCategory(title: string, categories: Category[]): Category |
 
 /** Precedence: manual override > first matching enabled rule > fallback. */
 export function resolveColor(id: string, title: string, s: Settings): Resolved {
-  const o = s.overrides[id.toLowerCase()];
+  const o = s.overrides[normalizeId(id) ?? id];
   if (o) return { color: o === NONE ? null : o, source: 'manual' };
   const category = matchCategory(title, s.categories);
   if (category) return { color: category.color, source: 'rule', category };

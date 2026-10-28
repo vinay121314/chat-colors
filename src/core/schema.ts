@@ -39,6 +39,15 @@ export interface Settings {
 
 const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Conversation ids seen so far are UUIDs; accept any URL-safe token so an id-format change doesn't break us. */
+export const ID_PATTERN = '[A-Za-z0-9][A-Za-z0-9_-]{7,127}';
+const ID = new RegExp(`^${ID_PATTERN}$`);
+
+/** Canonical form of a conversation id (UUIDs lowercased, others kept as-is), or null if invalid. */
+export function normalizeId(value: unknown): string | null {
+  if (typeof value !== 'string' || !ID.test(value)) return null;
+  return UUID.test(value) ? value.toLowerCase() : value;
+}
 
 /** Returns a lowercase #rrggbb or null. Accepts #rgb shorthand. */
 export function normalizeHex(value: unknown): string | null {
@@ -47,10 +56,6 @@ export function normalizeHex(value: unknown): string | null {
   if (!HEX.test(v)) return null;
   const h = v.slice(1).toLowerCase();
   return '#' + (h.length === 3 ? [...h].map((c) => c + c).join('') : h);
-}
-
-export function isConversationId(value: unknown): value is string {
-  return typeof value === 'string' && UUID.test(value);
 }
 
 const cat = (id: string, name: string, color: string, keywords: string[]): Category => ({
@@ -121,7 +126,8 @@ export function migrate(raw: unknown): Settings {
   if (isObj(raw.overrides)) {
     for (const [k, v] of Object.entries(raw.overrides)) {
       const o = normOverride(v);
-      if (isConversationId(k) && o) overrides[k.toLowerCase()] = o;
+      const id = normalizeId(k);
+      if (id && o) overrides[id] = o;
     }
   }
   const seen = new Set<string>();

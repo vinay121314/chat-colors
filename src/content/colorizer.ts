@@ -15,13 +15,14 @@ export function createColorizer(set: SetOverride) {
   let running = false;
   let pending = false;
   let vars: HTMLStyleElement | null = null;
+  let rowCount = 0;
 
   // Narrow observer: the sidebar only. Title edits (characterData), new/removed rows, recycled hrefs.
   const sidebarObs = new MutationObserver(schedule);
-  // Minimal root observer, only to notice the sidebar being removed/replaced/first rendered.
-  // Its callback is O(1) while the sidebar is connected.
+  // Minimal root observer, only to notice the sidebar being removed/replaced/first rendered, or
+  // conversation links appearing outside the container we picked. O(1) once rows are found.
   const bodyObs = new MutationObserver(() => {
-    if (!root?.isConnected) schedule();
+    if (!root?.isConnected || rowCount === 0) schedule();
   });
 
   function schedule(): void {
@@ -55,10 +56,12 @@ export function createColorizer(set: SetOverride) {
 
   function scan(): void {
     if (!running || !s) return;
-    if (!root?.isConnected) bind();
+    if (!root?.isConnected || rowCount === 0) bind();
     if (!root) return; // unsupported/absent sidebar: do nothing rather than guess
     const seen = new Set<Element>();
-    for (const row of findRows(root)) {
+    const rows = findRows(root);
+    rowCount = rows.length;
+    for (const row of rows) {
       seen.add(row.el);
       const title = getTitle(row.el);
       decorate(row, resolveColor(row.id, title, s).color, title, open);
@@ -73,7 +76,7 @@ export function createColorizer(set: SetOverride) {
       vars.id = 'crc-vars';
       document.head.append(vars);
     }
-    vars.textContent = `:root{--crc-w:${a.thickness}px;--crc-o:${a.opacity}%;--crc-r:${a.radius}px}`;
+    vars.textContent = `:root{--crc-w:${a.thickness}px;--crc-o:${a.opacity / 100};--crc-r:${a.radius}px}`;
   }
 
   function stop(): void {
@@ -86,6 +89,7 @@ export function createColorizer(set: SetOverride) {
     vars?.remove();
     vars = null;
     root = null;
+    rowCount = 0;
   }
 
   return {

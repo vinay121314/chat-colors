@@ -3,6 +3,8 @@ import { migrate, type Settings } from './schema';
 export const KEY = 'crc:settings';
 /** Popup -> content script: "which conversation is open in this tab?" */
 export const MSG_CURRENT = 'crc:current';
+/** Popup -> content script: structural diagnostics (no titles, ids masked). */
+export const MSG_DIAG = 'crc:diag';
 
 /** Loads settings; malformed or missing data is repaired to valid defaults. */
 export async function load(): Promise<Settings> {

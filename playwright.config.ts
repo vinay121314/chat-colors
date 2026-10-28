@@ -9,4 +9,5 @@ export default defineConfig({
   timeout: 30_000,
   workers: 1, // each test launches its own browser with the extension
   reporter: 'list',
+  use: { screenshot: 'only-on-failure' },
 });

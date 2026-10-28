@@ -7,64 +7,109 @@
     <link rel="stylesheet" href="./popup.css" />
   </head>
   <body>
-    <header>
-      <h1>Recents Colorizer</h1>
-      <label class="switch">
-        <input type="checkbox" id="enabled" role="switch" />
-        <span>Enabled</span>
-      </label>
+    <header class="top">
+      <div class="brand">
+        <svg class="logo" viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="3" y="4" width="18" height="16" rx="4" fill="var(--soft)" stroke="var(--line-strong)" />
+          <rect x="6" y="7.5" width="2.5" height="3" rx="1.25" fill="#2f7de1" />
+          <rect x="10" y="8.25" width="8" height="1.5" rx=".75" fill="var(--faint)" />
+          <rect x="6" y="13.5" width="2.5" height="3" rx="1.25" fill="#16a34a" />
+          <rect x="10" y="14.25" width="6" height="1.5" rx=".75" fill="var(--faint)" />
+        </svg>
+        <div>
+          <h1>Recents Colorizer</h1>
+          <p id="status" class="status" data-tone="idle" aria-live="polite"><i></i><span>Checking…</span></p>
+        </div>
+      </div>
+      <input type="checkbox" id="enabled" class="switch" role="switch" aria-label="Enable coloring" />
     </header>
 
-    <section aria-labelledby="h-current">
-      <h2 id="h-current">Current conversation</h2>
-      <div id="current"></div>
-    </section>
+    <div class="tabs" role="tablist" aria-label="Sections">
+      <button type="button" role="tab" id="tab-chat" aria-controls="panel-chat" aria-selected="true">Conversation</button>
+      <button type="button" role="tab" id="tab-rules" aria-controls="panel-rules" aria-selected="false" tabindex="-1">Rules</button>
+      <button type="button" role="tab" id="tab-style" aria-controls="panel-style" aria-selected="false" tabindex="-1">Style</button>
+      <button type="button" role="tab" id="tab-data" aria-controls="panel-data" aria-selected="false" tabindex="-1">Data</button>
+    </div>
 
-    <section aria-labelledby="h-cats">
-      <h2 id="h-cats">Categories &amp; keyword rules</h2>
-      <p class="hint">First enabled category with a matching keyword wins. Matching is case-insensitive, on visible sidebar titles only.</p>
-      <ol id="categories" class="cats"></ol>
-      <div class="row">
-        <button type="button" id="add-cat">Add category</button>
-      </div>
-      <div class="row">
-        <label for="fallback">Uncategorized</label>
-        <input type="color" id="fallback" />
-        <label class="inline"><input type="checkbox" id="fallback-none" /> No border</label>
-      </div>
-      <div class="row">
-        <label for="test-title">Test a title</label>
-        <input type="text" id="test-title" placeholder="e.g. Fix TypeScript bug" />
-      </div>
-      <p id="test-result" class="hint" aria-live="polite"></p>
-    </section>
+    <main>
+      <section role="tabpanel" id="panel-chat" aria-labelledby="tab-chat">
+        <div id="current"></div>
+      </section>
 
-    <section aria-labelledby="h-look">
-      <h2 id="h-look">Appearance</h2>
-      <div class="row"><label for="thickness">Thickness</label><input type="range" id="thickness" min="2" max="6" step="1" /><output id="thickness-v"></output></div>
-      <div class="row"><label for="opacity">Opacity</label><input type="range" id="opacity" min="10" max="100" step="5" /><output id="opacity-v"></output></div>
-      <div class="row"><label for="radius">Radius</label><input type="range" id="radius" min="0" max="12" step="1" /><output id="radius-v"></output></div>
-    </section>
+      <section role="tabpanel" id="panel-rules" aria-labelledby="tab-rules" hidden>
+        <p class="lede">Titles are matched case-insensitively against keywords. The first enabled category from the top wins.</p>
+        <div class="tester">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5" /><path d="m10.5 10.5 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
+          <input type="text" id="test-title" placeholder="Test a title…" aria-label="Test a title" autocomplete="off" />
+          <span id="test-result" class="pill" aria-live="polite"></span>
+        </div>
+        <ol id="categories" class="cats"></ol>
+        <button type="button" id="add-cat" class="add">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
+          Add category
+        </button>
+        <div class="card fallback">
+          <label class="well sm"><input type="color" id="fallback" aria-label="Uncategorized color" /></label>
+          <div class="grow">
+            <p class="label">Uncategorized</p>
+            <p class="sub">Chats that match no rule</p>
+          </div>
+          <label class="inline"><span>Border</span><input type="checkbox" id="fallback-on" class="switch sm" role="switch" aria-label="Show border for uncategorized chats" /></label>
+        </div>
+      </section>
 
-    <section aria-labelledby="h-io">
-      <h2 id="h-io">Import / export</h2>
-      <div class="row">
-        <button type="button" id="export">Export JSON</button>
-        <button type="button" id="import-btn">Import JSON</button>
-        <input type="file" id="import" accept="application/json,.json" hidden />
-        <button type="button" id="reset" class="danger">Reset all</button>
-      </div>
-      <p id="io-status" class="hint" role="status"></p>
-    </section>
+      <section role="tabpanel" id="panel-style" aria-labelledby="tab-style" hidden>
+        <div class="preview" id="preview" aria-hidden="true"></div>
+        <div class="card sliders">
+          <label class="slider"><span>Thickness</span><input type="range" id="thickness" min="2" max="6" step="1" /><output id="thickness-v"></output></label>
+          <label class="slider"><span>Opacity</span><input type="range" id="opacity" min="10" max="100" step="5" /><output id="opacity-v"></output></label>
+          <label class="slider"><span>Roundness</span><input type="range" id="radius" min="0" max="12" step="1" /><output id="radius-v"></output></label>
+        </div>
+      </section>
 
-    <section aria-labelledby="h-about">
-      <h2 id="h-about">About &amp; privacy</h2>
-      <p class="hint">
-        Reads only conversation links and visible titles in the ChatGPT sidebar. Never reads messages, cookies or
-        credentials. Settings stay in this browser (<code>chrome.storage.local</code>); nothing is sent anywhere.
-        Open source, MIT licensed.
-      </p>
-    </section>
+      <section role="tabpanel" id="panel-data" aria-labelledby="tab-data" hidden>
+        <div class="group">
+          <p class="eyebrow">Backup</p>
+          <div class="card row">
+            <div class="grow"><p class="label">Settings file</p><p class="sub">Categories, rules, manual colors, style</p></div>
+            <button type="button" id="export" class="btn">Export</button>
+            <button type="button" id="import-btn" class="btn">Import</button>
+            <input type="file" id="import" accept="application/json,.json" hidden />
+          </div>
+          <p id="io-status" class="note" role="status"></p>
+        </div>
+
+        <div class="group">
+          <p class="eyebrow">Troubleshooting</p>
+          <div class="card">
+            <p id="diag-summary" class="label">Open chatgpt.com in this tab to run diagnostics.</p>
+            <p class="sub">The report contains page structure only: link formats and attribute names. No titles or messages; ids are masked.</p>
+            <div class="row end">
+              <button type="button" id="diag-copy" class="btn" disabled>Copy diagnostics</button>
+            </div>
+            <details id="diag-details" hidden><summary>View report</summary><pre id="diag-pre"></pre></details>
+          </div>
+        </div>
+
+        <div class="group">
+          <p class="eyebrow">Privacy</p>
+          <div class="card">
+            <p class="sub">
+              Reads only sidebar links and their visible titles. Never reads messages, cookies or credentials. Settings stay in this
+              browser (<code>chrome.storage.local</code>). No network requests, no analytics.
+            </p>
+          </div>
+        </div>
+
+        <div class="group">
+          <div class="card row danger-zone">
+            <div class="grow"><p class="label">Reset everything</p><p class="sub">Restore default categories and remove all manual colors</p></div>
+            <button type="button" id="reset" class="btn danger">Reset</button>
+          </div>
+          <p class="foot">v<span id="version"></span> · MIT</p>
+        </div>
+      </section>
+    </main>
 
     <script type="module" src="./popup.ts"></script>
   </body>

@@ -1,4 +1,4 @@
-# QA report — v1.0.0 (2026-10-28)
+# QA report — v1.0.0 (2026-10-28, revision 2)
 
 ## Automated results
 
@@ -6,38 +6,47 @@
 |---|---|
 | `npm run lint` (ESLint + bans on `innerHTML`/`eval`) | ✅ pass |
 | `npm run typecheck` (TS strict, `noUncheckedIndexedAccess`) | ✅ pass |
-| `npm test`: 91 Vitest tests, 5 files | ✅ 91/91 |
-| `npm run build`: `dist/` ≈ 43 KB, no runtime deps | ✅ pass |
-| `npm run test:e2e`: 9 Playwright tests, built extension in Chromium on the fixture page | ✅ 9/9 |
+| `npm test`: Vitest, 5 files | ✅ 97/97 |
+| `npm run build`: no runtime deps | ✅ pass |
+| `npm run test:e2e`: Playwright, built extension in Chromium on the fixture page | ✅ 14/14 |
+
+## Revision 2: reported "colors not applied" and "UI looks cheap"
+
+The root causes were likely but couldn't be confirmed without a logged-in session:
+
+1. **Painting.** The colored edge was an inset `box-shadow` on the row link. Any child with an opaque background (typical for hover and selected states) covers it completely. It's now a dedicated overlay bar element (`z-index: 2`, `pointer-events: none`). A new e2e test covers the whole row with an opaque child and asserts the bar is still the top-most painted element.
+2. **Detection.** The root was taken from a fixed container verified only while logged out. Now:
+   - the root is derived from the conversation links themselves (inside an `<aside>` or navigation landmark) when the known containers hold none;
+   - detection keeps retrying while zero rows are found;
+   - conversation ids accept any URL-safe token, not only UUIDs.
+3. **Visibility.** The popup header now reports "N chats detected" or "Sidebar not recognized". *Data → Copy diagnostics* produces a structure-only report: no titles, ids and slugs masked. Unit and e2e tests check that nothing private leaks.
+
+UI redesign:
+- **Popup:** tabbed (Conversation / Rules / Style / Data), with a token-based neutral design, custom switches, collapsible category rows, keyword chips, a live style preview, and empty states.
+- **In-page picker:** redesigned, and its theme now follows ChatGPT's actual background color instead of the OS setting.
+
+Bugs found during this revision:
+- **Picker layout overflow.** `1fr` grid columns blew out to the content's width. Fixed with `minmax(0, 1fr)` and fixed-size swatches.
+- **All popup tab panels visible at once.** An author `display: grid` overrode the UA `[hidden]` rule. Fixed, and an e2e test now asserts that inactive panels are hidden.
 
 ## Verified (fixture page in a real Chromium, extension loaded from `dist/`)
 
-- Content script injects only on `https://chatgpt.com/*`, and colors only sidebar conversation links (`/c/`, `/g/g-p-…/c/`, `/g/g-…/c/`).
-- No layout shift: every row's bounding box is identical with decoration on and off.
-- Clicking the in-row control doesn't navigate and doesn't reach page-level click handlers.
-- Manual color persists through a page reload and a title rename. Auto colors re-classify on rename.
-- Custom HEX, Remove color, Reset to automatic, and invalid HEX rejection.
-- Keyboard: Tab reaches the control after ChatGPT-style row buttons, Enter opens the picker, Escape closes it and returns focus.
-- Two tabs update live from a single storage write.
-- Popup ↔ content messaging works and the extension cannot see the ChatGPT tab's URL or title (no `tabs` permission).
-- Popup: keyword add and toggle, priority reorder, preview, appearance sliders, export, invalid and valid import.
-- Light and dark themes (popup tokens, borders visible). Palette contrast is ≥ 3:1 on #fff, #212121 and #171717 (unit test).
-
-## Bugs found and fixed during QA
-
-1. Row titles included the text of buttons inside the row (for example ChatGPT's "…" menu), which could cause wrong keyword matches. `getTitle` now skips text inside `button` and `[role=button]` elements. A regression test was added.
-2. Escape didn't return focus to the in-row control, because the popover `toggle` event fires after focus has already moved to `<body>`. This is now handled on `beforetoggle`.
+- Injects only on `https://chatgpt.com/*` and decorates only sidebar conversation links (`/c/`, `/g/g-p-…/c/`, `/g/g-…/c/`).
+- The bar stays visible above opaque row content. No layout shift: row boxes are identical with decoration on and off.
+- The in-row control never navigates. Manual colors persist through reload and rename, and auto colors re-classify on rename.
+- Custom HEX, Remove, Reset, and invalid HEX rejected.
+- Keyboard: Tab reaches the control, Enter opens it, Escape closes it and returns focus. Popup tabs follow the ARIA arrow-key pattern.
+- Multi-tab live updates. Popup ↔ content messaging works without the `tabs` permission.
+- Popup Conversation tab with an active ChatGPT tab: status "7 chats detected", automatic category badge, and manual color applied live.
+- Light and dark themes for the popup and the picker. Palette contrast is ≥ 3:1 on light and dark sidebars.
 
 ## Live chatgpt.com verification
 
 | Item | Status |
 |---|---|
-| Sidebar container `aside#ds-sidebar` › `nav[data-slot="sidebar-history"][aria-label="Chat history"]` | ✅ Verified live (logged-out page, 2026-10-28) |
+| `aside#ds-sidebar` › `nav[data-slot="sidebar-history"]` exists | ✅ Verified live (logged-out page) |
 | Class names are generated atomic CSS and are not used | ✅ Verified live |
-| Conversation row `<a href="/c/<uuid>">` with title text | ⏳ **UNVERIFIED** (no logged-in session yet) |
-| Project / custom GPT URL formats | ⏳ **UNVERIFIED** |
-| Native hover, selected and menu behaviour preserved | ⏳ **UNVERIFIED** on live site (verified on fixture) |
+| Logged-in row markup, URL formats, title location | ⏳ **UNVERIFIED**. Use *Data → Copy diagnostics* on your account to confirm. |
 | Control position vs. native row menu | ⏳ **UNVERIFIED** |
-| List virtualization | ⏳ **UNVERIFIED** |
 
-Until these rows are checked against a logged-in session, **live ChatGPT compatibility is unverified.**
+**Live ChatGPT compatibility is unverified** until a diagnostics report from a logged-in session is reviewed.

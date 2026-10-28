@@ -1,5 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
-import { COLOR_ATTR, ID_ATTR, decorate, findRoot, findRows, getTitle, parseConversationId, undecorate } from '../../src/content/adapter';
+import {
+  COLOR_ATTR,
+  ID_ATTR,
+  decorate,
+  diagnose,
+  findRoot,
+  findRows,
+  getTitle,
+  maskPath,
+  parseConversationId,
+  undecorate,
+} from '../../src/content/adapter';
 import { ID, mountPage, row } from '../fixtures/sidebar';
 
 const U = '6735a0f2-1c3d-8007-9a6b-0123456789ab';
@@ -13,6 +24,7 @@ describe('parseConversationId', () => {
     [`https://chatgpt.com/c/${U}`, U],
     [`/g/g-p-0123456789abcdef0123456789abcdef-my-project/c/${U}`, U], // Project chat
     [`/g/g-AbCdEf123-code-helper/c/${U}`, U], // custom GPT chat
+    ['/c/WEB_abc-123XYZ', 'WEB_abc-123XYZ'], // non-UUID id format: accepted, case preserved
   ])('%s -> id', (href, id) => expect(parseConversationId(href)).toBe(id));
 
   it.each([
@@ -23,7 +35,8 @@ describe('parseConversationId', () => {
     '/images',
     `/g/g-p-0123-my-project/project`,
     '/g/g-AbCdEf123-code-helper',
-    `/c/not-a-uuid`,
+    `/c/short`,
+    `/c/has space here`,
     `/share/${U}`,
     `/c/${U}/extra`,
     `https://evil.example/c/${U}`,
@@ -45,6 +58,26 @@ describe('discovery', () => {
   it('returns null root on an unsupported layout', () => {
     document.body.append(row(`/c/${ID.ts}`, 'orphan link'));
     expect(findRoot()).toBeNull();
+  });
+
+  it('derives the root from conversation links in a navigation landmark when known containers are absent', () => {
+    const nav = document.createElement('nav');
+    const inner = document.createElement('nav');
+    inner.append(row(`/c/${ID.ts}`, 'python'));
+    nav.append(inner);
+    document.body.append(row(`/c/${ID.main}`, 'link in a message'), nav);
+    expect(findRoot()).toBe(nav); // outermost nav, not the message link
+  });
+
+  it('prefers the <aside> holding the links when the known container is empty', () => {
+    const empty = document.createElement('nav');
+    empty.setAttribute('aria-label', 'Chat history');
+    const aside = document.createElement('aside');
+    const list = document.createElement('div');
+    list.append(row(`/c/${ID.ts}`, 'python'));
+    aside.append(list);
+    document.body.append(empty, aside);
+    expect(findRoot()).toBe(aside);
   });
 
   it('falls back to the history nav if #ds-sidebar is absent', () => {
@@ -78,6 +111,7 @@ describe('decorate', () => {
     const open = vi.fn();
     for (let i = 0; i < 3; i++) decorate({ el: a, id: ID.ts }, '#ff0000', 'Title', open);
     expect(a.querySelectorAll('.crc-btn')).toHaveLength(1);
+    expect(a.querySelectorAll('.crc-bar')).toHaveLength(1);
     expect(a.getAttribute(ID_ATTR)).toBe(ID.ts);
     expect(a.hasAttribute(COLOR_ATTR)).toBe(true);
     expect(a.style.getPropertyValue('--crc-c')).toBe('#ff0000');
@@ -90,6 +124,7 @@ describe('decorate', () => {
     decorate({ el: a, id: ID.ts }, null, 'Title', null);
     expect(a.hasAttribute(COLOR_ATTR)).toBe(false);
     expect(a.style.getPropertyValue('--crc-c')).toBe('');
+    expect(a.querySelector('.crc-bar')).toBeNull();
   });
 
   it('control is keyboard-focusable and labelled', () => {
@@ -117,6 +152,25 @@ describe('decorate', () => {
     expect(ev.defaultPrevented).toBe(true);
     expect(pageHandler).not.toHaveBeenCalled();
     document.removeEventListener('click', pageHandler);
+  });
+
+  it('diagnostics expose structure but never titles or raw ids', () => {
+    mountPage();
+    decorate({ el: document.querySelector<HTMLAnchorElement>(`a[href="/c/${ID.ts}"]`)!, id: ID.ts }, '#ff0000', 'x', vi.fn());
+    const d = diagnose();
+    const text = JSON.stringify(d);
+    expect(d.rows).toBe(6);
+    expect(d.root).toContain('#ds-sidebar');
+    expect(d.colored).toBe(1);
+    expect(text).not.toMatch(/TypeScript|meeting|recipe|Hello|Research|urgent/i);
+    for (const id of Object.values(ID)) expect(text).not.toContain(id);
+    expect(text).not.toContain('side-project'); // project slug masked
+    expect(d.sampleRow?.join('\n')).toMatch(/#text\(\d+\)/);
+  });
+
+  it('maskPath hides ids and slugs', () => {
+    expect(maskPath(`/g/g-p-abc-my-secret-project/c/${U}?x=1`)).toBe('/g/<id>/c/<uuid>');
+    expect(maskPath('/c/WEB_abc-123XYZ')).toBe('/c/<id>');
   });
 
   it('undecorate restores the row', () => {
