@@ -1,0 +1,109 @@
+:root {
+  --bg: #ffffff;
+  --surface: #f6f7f9;
+  --text: #1b1d21;
+  --muted: #5d636f;
+  --border: #d9dce1;
+  --accent: #2f6fdb;
+  --danger: #c92a2a;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17181b;
+    --surface: #212328;
+    --text: #e8eaed;
+    --muted: #9aa0aa;
+    --border: #353841;
+    --accent: #6ea2ff;
+    --danger: #ff6b6b;
+    color-scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  width: 360px;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.45 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+h1 { font-size: 14px; margin: 0; font-weight: 650; }
+h2 { font-size: 11px; margin: 0 0 8px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 650; }
+section { padding: 12px 14px; border-bottom: 1px solid var(--border); }
+/* Dim settings that have no visible effect while disabled (still editable). */
+body.disabled section[aria-labelledby='h-current'],
+body.disabled section[aria-labelledby='h-cats'],
+body.disabled section[aria-labelledby='h-look'] { opacity: 0.55; }
+p { margin: 0 0 6px; }
+.hint { color: var(--muted); font-size: 12px; }
+.title { font-weight: 600; display: flex; align-items: center; gap: 8px; overflow-wrap: anywhere; }
+.dot { flex: none; width: 10px; height: 10px; border-radius: 50%; border: 1px solid var(--border); }
+code { font-size: 11px; }
+
+.row { display: flex; align-items: center; gap: 6px; margin: 6px 0; flex-wrap: wrap; }
+.row > label:first-child { min-width: 84px; }
+.inline { display: inline-flex; align-items: center; gap: 4px; }
+output { min-width: 36px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+input[type='range'] { flex: 1; accent-color: var(--accent); }
+input[type='checkbox'] { accent-color: var(--accent); margin: 0; }
+
+input[type='text'] {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  padding: 4px 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+}
+input[type='color'] { width: 28px; height: 26px; padding: 0; border: 0; background: none; cursor: pointer; }
+.hex { max-width: 90px; font-family: ui-monospace, Consolas, monospace !important; }
+
+button {
+  font: inherit;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+button:hover:not(:disabled) { border-color: var(--muted); }
+button:disabled { opacity: 0.4; cursor: default; }
+button.icon { padding: 2px 7px; line-height: 1.2; }
+button.danger { color: var(--danger); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.switch { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+
+.swatches { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.sw { width: 22px; height: 22px; padding: 0; border-radius: 50%; border: 2px solid transparent; }
+.sw[aria-pressed='true'] { border-color: var(--text); box-shadow: 0 0 0 2px var(--bg) inset; }
+
+.cats { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.cat { padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.cat .row { margin: 4px 0; }
+.cat .name { font-weight: 600; }
+.off { opacity: 0.6; }
+.kws { list-style: none; margin: 4px 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+.kws li { display: inline-flex; align-items: center; gap: 2px; padding: 1px 2px 1px 6px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg); }
+.kws label { display: inline-flex; align-items: center; gap: 4px; }
+.kws button { border: 0; background: none; padding: 0 5px; }
+
+@media (prefers-reduced-motion: no-preference) {
+  button, input { transition: border-color 0.12s; }
+}

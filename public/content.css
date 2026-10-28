@@ -1,0 +1,47 @@
+/* Injected on chatgpt.com. Everything is scoped to our data-crc-* attributes / crc-* classes. */
+
+/* Inset shadow instead of border-left: no box-size change, so no layout shift. */
+a[data-crc-color] {
+  box-shadow: inset var(--crc-w, 4px) 0 0 0 color-mix(in srgb, var(--crc-c) var(--crc-o, 100%), transparent);
+  border-radius: var(--crc-r, 6px);
+}
+
+.crc-pos {
+  position: relative;
+}
+
+.crc-btn {
+  all: unset;
+  box-sizing: border-box;
+  position: absolute;
+  right: 40px; /* clear of ChatGPT's own row "..." menu button (UNVERIFIED offset) */
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  margin-top: -7px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  background: var(--crc-c, transparent);
+  opacity: 0;
+  cursor: pointer;
+  z-index: 1;
+  transition: opacity 0.12s ease;
+}
+
+a:hover > .crc-btn,
+a:focus-within > .crc-btn,
+.crc-btn:focus-visible,
+.crc-btn[aria-expanded='true'] {
+  opacity: 1;
+}
+
+.crc-btn:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .crc-btn {
+    transition: none;
+  }
+}

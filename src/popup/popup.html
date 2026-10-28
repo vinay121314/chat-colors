@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ChatGPT Recents Colorizer</title>
+    <link rel="stylesheet" href="./popup.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Recents Colorizer</h1>
+      <label class="switch">
+        <input type="checkbox" id="enabled" role="switch" />
+        <span>Enabled</span>
+      </label>
+    </header>
+
+    <section aria-labelledby="h-current">
+      <h2 id="h-current">Current conversation</h2>
+      <div id="current"></div>
+    </section>
+
+    <section aria-labelledby="h-cats">
+      <h2 id="h-cats">Categories &amp; keyword rules</h2>
+      <p class="hint">First enabled category with a matching keyword wins. Matching is case-insensitive, on visible sidebar titles only.</p>
+      <ol id="categories" class="cats"></ol>
+      <div class="row">
+        <button type="button" id="add-cat">Add category</button>
+      </div>
+      <div class="row">
+        <label for="fallback">Uncategorized</label>
+        <input type="color" id="fallback" />
+        <label class="inline"><input type="checkbox" id="fallback-none" /> No border</label>
+      </div>
+      <div class="row">
+        <label for="test-title">Test a title</label>
+        <input type="text" id="test-title" placeholder="e.g. Fix TypeScript bug" />
+      </div>
+      <p id="test-result" class="hint" aria-live="polite"></p>
+    </section>
+
+    <section aria-labelledby="h-look">
+      <h2 id="h-look">Appearance</h2>
+      <div class="row"><label for="thickness">Thickness</label><input type="range" id="thickness" min="2" max="6" step="1" /><output id="thickness-v"></output></div>
+      <div class="row"><label for="opacity">Opacity</label><input type="range" id="opacity" min="10" max="100" step="5" /><output id="opacity-v"></output></div>
+      <div class="row"><label for="radius">Radius</label><input type="range" id="radius" min="0" max="12" step="1" /><output id="radius-v"></output></div>
+    </section>
+
+    <section aria-labelledby="h-io">
+      <h2 id="h-io">Import / export</h2>
+      <div class="row">
+        <button type="button" id="export">Export JSON</button>
+        <button type="button" id="import-btn">Import JSON</button>
+        <input type="file" id="import" accept="application/json,.json" hidden />
+        <button type="button" id="reset" class="danger">Reset all</button>
+      </div>
+      <p id="io-status" class="hint" role="status"></p>
+    </section>
+
+    <section aria-labelledby="h-about">
+      <h2 id="h-about">About &amp; privacy</h2>
+      <p class="hint">
+        Reads only conversation links and visible titles in the ChatGPT sidebar. Never reads messages, cookies or
+        credentials. Settings stay in this browser (<code>chrome.storage.local</code>); nothing is sent anywhere.
+        Open source, MIT licensed.
+      </p>
+    </section>
+
+    <script type="module" src="./popup.ts"></script>
+  </body>
+</html>

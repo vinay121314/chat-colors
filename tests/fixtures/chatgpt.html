@@ -1,0 +1,64 @@
+<!doctype html>
+<!--
+  Static stand-in for chatgpt.com used by Playwright (served via request interception).
+  Containers match what was verified live; row markup and styles are an UNVERIFIED approximation.
+  Titles are synthetic. A document-level click handler simulates ChatGPT's SPA navigation.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>ChatGPT (fixture)</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { margin: 0; font: 14px/1.4 system-ui, sans-serif; display: flex; background: #fff; color: #0d0d0d; }
+      #ds-sidebar { width: 260px; height: 100vh; overflow: auto; background: #f9f9f9; padding: 8px 0; }
+      nav[aria-label='Sidebar'] a { display: block; padding: 6px 16px; color: inherit; text-decoration: none; }
+      h2 { font-size: 12px; color: #8f8f8f; margin: 16px 16px 4px; font-weight: 500; }
+      .row { display: flex; align-items: center; height: 36px; padding: 0 10px; margin: 0 6px; border-radius: 8px; color: inherit; text-decoration: none; }
+      .row:hover, .row[aria-current='page'] { background: #ececec; }
+      .row .truncate { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .row .opts { width: 24px; height: 24px; border: 0; background: none; color: inherit; opacity: 0; }
+      .row:hover .opts { opacity: 1; }
+      main { flex: 1; padding: 24px; }
+      @media (prefers-color-scheme: dark) {
+        body { background: #212121; color: #ececec; }
+        #ds-sidebar { background: #181818; }
+        .row:hover, .row[aria-current='page'] { background: #2a2a2a; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="web-mobile-root">
+      <aside id="ds-sidebar">
+        <nav data-slot="sidebar-history" aria-label="Chat history">
+          <nav aria-label="Sidebar">
+            <a href="/images">Images</a>
+            <a href="/gpts">GPTs</a>
+            <a href="/g/g-p-0123456789abcdef0123456789abcdef-side-project/project">Side project</a>
+          </nav>
+          <h2>Chats</h2>
+          <div id="list">
+            <a class="row" href="/c/11111111-1111-4111-8111-111111111111" aria-current="page"><div class="truncate">Fix TypeScript bug in parser</div><button class="opts" type="button" aria-label="Open conversation options">…</button></a>
+            <a class="row" href="/c/22222222-2222-4222-8222-222222222222"><div class="truncate">Client meeting notes</div><button class="opts" type="button" aria-label="Open conversation options">…</button></a>
+            <a class="row" href="/c/33333333-3333-4333-8333-333333333333"><div class="truncate">Weeknight recipe ideas</div><button class="opts" type="button" aria-label="Open conversation options">…</button></a>
+            <a class="row" href="/c/44444444-4444-4444-8444-444444444444"><div class="truncate">Hello there</div><button class="opts" type="button" aria-label="Open conversation options">…</button></a>
+            <a class="row" href="/g/g-p-0123456789abcdef0123456789abcdef-side-project/c/55555555-5555-4555-8555-555555555555"><div class="truncate">Urgent launch checklist</div><button class="opts" type="button" aria-label="Open conversation options">…</button></a>
+            <a class="row" href="/g/g-AbCdEf123-code-helper/c/66666666-6666-4666-8666-666666666666"><div class="truncate">Research paper summary</div><button class="opts" type="button" aria-label="Open conversation options">…</button></a>
+            <a class="row" href="/c/77777777-7777-4777-8777-777777777777"><div class="truncate">Prompt ideas for an LLM eval</div><button class="opts" type="button" aria-label="Open conversation options">…</button></a>
+          </div>
+        </nav>
+      </aside>
+      <main><p>Conversation body (never read by the extension).</p></main>
+    </div>
+    <script>
+      window.__navigations = 0;
+      document.addEventListener('click', (e) => {
+        const a = e.target.closest('a');
+        if (!a) return;
+        e.preventDefault();
+        window.__navigations++;
+        history.pushState({}, '', a.getAttribute('href'));
+      });
+    </script>
+  </body>
+</html>
