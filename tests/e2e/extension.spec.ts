@@ -49,7 +49,7 @@ async function openChat(context: BrowserContext, path = `/c/${ID.ts}`): Promise<
   await p.locator('#ds-sidebar a[data-crc]').first().waitFor({ state: 'attached' });
   return p;
 }
-const rowLoc = (p: Page, id: string) => p.locator(`#ds-sidebar a[data-crc="${id}"]`);
+const rowLoc = (p: Page, id: string) => p.locator(`#ds-sidebar [data-crc="${id}"]`);
 /**
  * What the user actually sees: the rendered bar's color as #rrggbb plus its size ("#2f7de1 4px"),
  * or "none" when the row has no bar or it isn't painted.
@@ -223,6 +223,46 @@ test('bar stays visible above opaque row content (hover/selected backgrounds on 
   expect(hit).toBe('crc-bar');
 });
 
+test('title-only link layout: decorates the row, nothing overlaps the title text', async ({ context }) => {
+  const p = await openChat(context);
+  const INLINE = '88888888-8888-4888-8888-888888888888';
+  const row = p.locator('#inline-row');
+  await expect(row).toHaveAttribute('data-crc', INLINE); // the row, not the <a>
+  await row.hover();
+  const g = await row.evaluate((r) => {
+    const rect = (e: Element) => e.getBoundingClientRect();
+    const text = rect(r.querySelector('a')!);
+    const bar = rect(r.querySelector(':scope > .crc-bar')!);
+    const fill = rect(r.querySelector(':scope > .crc-fill')!);
+    const btn = rect(r.querySelector(':scope > .crc-btn')!);
+    return { textL: text.left, textR: text.right, barR: bar.right, fillW: fill.width, rowW: rect(r).width, btnL: btn.left };
+  });
+  expect(g.barR).toBeLessThanOrEqual(g.textL); // bar sits before the title, not on it
+  expect(g.btnL).toBeGreaterThanOrEqual(g.textR); // dot sits after the title, not on it
+  expect(g.fillW).toBe(g.rowW); // fill spans the whole row
+  expect(await shadowOf(p, INLINE)).toContain('#16a34a'); // "client" + "report" -> Work
+});
+
+test('fill mode tints the whole row; bar mode hides the fill', async ({ context, extId }) => {
+  const p = await openChat(context);
+  const fillOf = () =>
+    rowLoc(p, ID.meeting).evaluate((a) => {
+      const f = a.querySelector(':scope > .crc-fill');
+      return f ? getComputedStyle(f).display + ' ' + Math.round(f.getBoundingClientRect().width) : 'none';
+    });
+  expect(await fillOf()).toMatch(/^block \d+/); // default: bar + fill
+  const popup = await openPopup(context, extId);
+  await tab(popup, 'Style');
+  await popup.getByRole('radio', { name: 'Fill', exact: true }).check();
+  await expect.poll(() => shadowOf(p, ID.meeting)).toBe('none'); // bar hidden
+  await expect.poll(fillOf).toMatch(/^block/);
+  await popup.locator('#fill').fill('30');
+  await expect.poll(() => p.evaluate(() => document.getElementById('crc-vars')?.textContent ?? '')).toContain('--crc-f:30%');
+  await popup.getByRole('radio', { name: 'Bar', exact: true }).check();
+  await expect.poll(fillOf).toMatch(/^none/);
+  await expect.poll(() => shadowOf(p, ID.meeting)).toContain('#16a34a');
+});
+
 test('diagnostics report is structural only', async ({ context, extId }) => {
   await openChat(context);
   const popup = await openPopup(context, extId);
@@ -234,8 +274,8 @@ test('diagnostics report is structural only', async ({ context, extId }) => {
     }
     return null;
   });
-  expect(d.rows).toBe(7);
-  expect(d.colored).toBe(7);
+  expect(d.rows).toBe(8);
+  expect(d.colored).toBe(8);
   const text = JSON.stringify(d);
   expect(text).not.toMatch(/TypeScript|meeting|recipe|checklist|summary/i);
   expect(text).not.toContain(ID.ts);
@@ -355,7 +395,7 @@ for (const scheme of ['light', 'dark'] as const) {
     await popup.goto(`chrome-extension://${extId}/popup.html`);
     await expect(popup.locator('.convo-title')).toHaveText('Client meeting notes');
     await expect(popup.locator('#status')).toHaveAttribute('data-tone', 'ok');
-    await expect(popup.locator('#status')).toContainText('7 chats detected');
+    await expect(popup.locator('#status')).toContainText('8 chats detected');
     await expect(popup.locator('.badge')).toContainText('Automatic · Work');
     await popup.screenshot({ path: `${SHOTS}/popup-conversation-${scheme}.png` });
 

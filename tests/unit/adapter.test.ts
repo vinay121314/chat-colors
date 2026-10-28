@@ -9,6 +9,7 @@ import {
   getTitle,
   maskPath,
   parseConversationId,
+  rowBox,
   undecorate,
 } from '../../src/content/adapter';
 import { ID, mountPage, row } from '../fixtures/sidebar';
@@ -171,6 +172,30 @@ describe('decorate', () => {
   it('maskPath hides ids and slugs', () => {
     expect(maskPath(`/g/g-p-abc-my-secret-project/c/${U}?x=1`)).toBe('/g/<id>/c/<uuid>');
     expect(maskPath('/c/WEB_abc-123XYZ')).toBe('/c/<id>');
+  });
+
+  it('decorates the row container when the <a> wraps only the title', () => {
+    const ul = document.createElement('ul');
+    const li = document.createElement('li');
+    const inner = document.createElement('div');
+    const a = row(`/c/${ID.ts}`, 'Title only');
+    inner.append(a);
+    li.append(inner);
+    ul.append(li, document.createElement('li'));
+    document.body.append(ul);
+    expect(rowBox(a)).toBe(li); // climbs to the single-conversation container, stops at the list
+    const box = decorate({ el: a, id: ID.ts }, '#ff0000', 'Title only', vi.fn());
+    expect(box).toBe(li);
+    expect(li.getAttribute(ID_ATTR)).toBe(ID.ts);
+    expect(li.querySelector(':scope > .crc-bar')).not.toBeNull();
+    expect(li.querySelector(':scope > .crc-fill')).not.toBeNull();
+    expect(a.hasAttribute(ID_ATTR)).toBe(false);
+  });
+
+  it('does not climb into a container that holds other conversations', () => {
+    mountPage();
+    const a = document.querySelector(`a[href="/c/${ID.ts}"]`)!;
+    expect(rowBox(a)).toBe(a);
   });
 
   it('undecorate restores the row', () => {

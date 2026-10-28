@@ -60,10 +60,16 @@
 
       <section role="tabpanel" id="panel-style" aria-labelledby="tab-style" hidden>
         <div class="preview" id="preview" aria-hidden="true"></div>
+        <div class="segmented" role="radiogroup" aria-label="Style">
+          <label><input type="radio" name="mode" value="bar" /><span>Bar</span></label>
+          <label><input type="radio" name="mode" value="fill" /><span>Fill</span></label>
+          <label><input type="radio" name="mode" value="both" /><span>Bar + fill</span></label>
+        </div>
         <div class="card sliders">
-          <label class="slider"><span>Thickness</span><input type="range" id="thickness" min="2" max="6" step="1" /><output id="thickness-v"></output></label>
-          <label class="slider"><span>Opacity</span><input type="range" id="opacity" min="10" max="100" step="5" /><output id="opacity-v"></output></label>
-          <label class="slider"><span>Roundness</span><input type="range" id="radius" min="0" max="12" step="1" /><output id="radius-v"></output></label>
+          <label class="slider" data-for="fill"><span>Fill strength</span><input type="range" id="fill" min="5" max="40" step="1" /><output id="fill-v"></output></label>
+          <label class="slider" data-for="bar"><span>Bar width</span><input type="range" id="thickness" min="2" max="6" step="1" /><output id="thickness-v"></output></label>
+          <label class="slider" data-for="bar"><span>Bar opacity</span><input type="range" id="opacity" min="10" max="100" step="5" /><output id="opacity-v"></output></label>
+          <label class="slider" data-for="bar"><span>Bar roundness</span><input type="range" id="radius" min="0" max="12" step="1" /><output id="radius-v"></output></label>
         </div>
       </section>
 

@@ -9,8 +9,11 @@ import {
   normalizeHex,
   parseImport,
   type Category,
+  type Mode,
   type Settings,
 } from '../core/schema';
+
+const SLIDERS = ['fill', 'thickness', 'opacity', 'radius'] as const;
 import { MSG_CURRENT, MSG_DIAG, load, onChange, save, update } from '../core/storage';
 
 type Current = { id: string | null; title: string | null } | null;
@@ -367,11 +370,17 @@ function renderPreview(): void {
     ['Hello there', s.fallback === NONE ? null : s.fallback, false],
   ];
   const p = $('preview');
-  p.style.cssText = `--w:${a.thickness}px;--o:${a.opacity / 100};--rad:${a.radius}px`;
+  p.style.cssText = `--w:${a.thickness}px;--o:${a.opacity / 100};--rad:${a.radius}px;--f:${a.fill}%`;
+  p.dataset.mode = a.mode;
   p.replaceChildren(
     h('p', { cls: 'p-label', textContent: 'Preview' }),
-    ...rows.map(([t, c, sel]) => h('div', { cls: sel ? 'p-row sel' : 'p-row' }, ...(c ? [colorVar(h('b'), c)] : []), t)),
+    ...rows.map(([t, c, sel]) =>
+      colorVar(h('div', { cls: sel ? 'p-row sel' : 'p-row' }, ...(c ? [h('i'), h('b')] : []), h('span', { textContent: t })), c),
+    ),
   );
+  for (const el of document.querySelectorAll<HTMLElement>('.slider[data-for]')) {
+    el.classList.toggle('off', a.mode !== 'both' && a.mode !== el.dataset.for);
+  }
 }
 
 // ------------------------------------------------------------------ Data tab
@@ -395,10 +404,11 @@ function render(): void {
   document.body.classList.toggle('disabled', !s.enabled);
   $('fallback').value = s.fallback === NONE ? NEUTRAL : s.fallback;
   $('fallback-on').checked = s.fallback !== NONE;
-  for (const k of ['thickness', 'opacity', 'radius'] as const) {
+  for (const k of SLIDERS) {
     $(k).value = String(s.appearance[k]);
-    $(`${k}-v`).textContent = `${s.appearance[k]}${k === 'opacity' ? '%' : 'px'}`;
+    $(`${k}-v`).textContent = `${s.appearance[k]}${k === 'opacity' || k === 'fill' ? '%' : 'px'}`;
   }
+  for (const r of document.querySelectorAll<HTMLInputElement>('input[name="mode"]')) r.checked = r.value === s.appearance.mode;
   renderStatus();
   renderCurrent();
   renderCategories();
@@ -458,8 +468,11 @@ function wire(): void {
   };
   $('fallback').onchange = () => commit((x) => (x.fallback = $('fallback').value));
   $('fallback-on').onchange = () => commit((x) => (x.fallback = $('fallback-on').checked ? $('fallback').value : NONE));
-  for (const k of ['thickness', 'opacity', 'radius'] as const) {
+  for (const k of SLIDERS) {
     $(k).oninput = () => commit((x) => (x.appearance[k] = Number($(k).value)));
+  }
+  for (const r of document.querySelectorAll<HTMLInputElement>('input[name="mode"]')) {
+    r.onchange = () => commit((x) => (x.appearance.mode = r.value as Mode));
   }
   $('test-title').oninput = renderTest;
 

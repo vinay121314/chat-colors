@@ -125,8 +125,12 @@ describe('colorizer on fixture sidebar', () => {
   it('applies appearance settings as CSS variables', () => {
     mountPage();
     const s = start();
-    c.update({ ...s, appearance: { thickness: 2, opacity: 50, radius: 0 } });
-    expect(document.getElementById('crc-vars')!.textContent).toBe(':root{--crc-w:2px;--crc-o:0.5;--crc-r:0px}');
+    c.update({ ...s, appearance: { mode: 'both', thickness: 2, opacity: 50, radius: 0, fill: 20 } });
+    expect(document.getElementById('crc-vars')!.textContent).toBe(':root{--crc-w:2px;--crc-o:0.5;--crc-r:0px;--crc-f:20%}');
+    c.update({ ...s, appearance: { ...s.appearance, mode: 'bar' } });
+    expect(document.getElementById('crc-vars')!.textContent).toContain('.crc-fill{display:none!important}');
+    c.update({ ...s, appearance: { ...s.appearance, mode: 'fill' } });
+    expect(document.getElementById('crc-vars')!.textContent).toContain('.crc-bar{display:none!important}');
   });
 
   it('manual NONE and fallback NONE leave rows uncolored but still controllable', () => {

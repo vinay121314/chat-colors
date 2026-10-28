@@ -16,7 +16,10 @@ export const ID_ATTR = 'data-crc';
 export const COLOR_ATTR = 'data-crc-color';
 const BTN_CLASS = 'crc-btn';
 const BAR_CLASS = 'crc-bar';
+const FILL_CLASS = 'crc-fill';
 const POS_CLASS = 'crc-pos';
+/** Never climb into these when looking for a row container. */
+const ROW_STOP = 'nav, aside, section, ul, ol, main, body, [role="navigation"], [role="list"]';
 
 export interface Row {
   el: HTMLAnchorElement;
@@ -89,23 +92,64 @@ function setAttr(el: Element, name: string, value: string | null): void {
 }
 
 const positioned = new WeakSet<Element>();
+const boxes = new WeakMap<Element, Element>();
+
+function convCount(el: Element): number {
+  let n = 0;
+  for (const a of el.querySelectorAll(CANDIDATES)) if (parseConversationId(a.getAttribute('href'))) n++;
+  return n;
+}
+
+/**
+ * The visual row for a conversation link. On some layouts the <a> wraps only the title and the
+ * full-width row is an ancestor; decorating the <a> would then put the bar/dot on top of the text.
+ * Climb while the parent still holds exactly this one conversation and is still one row tall.
+ */
+export function rowBox(a: Element): Element {
+  const cached = boxes.get(a);
+  if (cached?.isConnected && cached.contains(a)) return cached;
+  const ah = a.getBoundingClientRect().height;
+  let box = a;
+  for (let p = a.parentElement; p && !p.matches(ROW_STOP); p = p.parentElement) {
+    if (convCount(p) !== 1) break;
+    if (p.getBoundingClientRect().height > Math.max(ah * 1.9, 52)) break; // grew past one row (e.g. a group header)
+    box = p;
+  }
+  boxes.set(a, box);
+  return box;
+}
 
 function child(el: Element, cls: string): HTMLElement | null {
   return el.querySelector<HTMLElement>(`:scope > .${cls}`);
 }
 
+function ensureChild(el: Element, cls: string, want: boolean): void {
+  const c = child(el, cls);
+  if (want && !c) {
+    const s = document.createElement('span');
+    s.className = cls;
+    s.setAttribute('aria-hidden', 'true');
+    el.append(s);
+  } else if (!want && c) {
+    c.remove();
+  }
+}
+
 /**
- * Idempotent: writes only what changed; at most one bar and one control per row.
- * The color is drawn by our own absolutely positioned bar (above the row's own backgrounds),
- * so ChatGPT's row styles are never modified, apart from position:relative on a static row.
+ * Idempotent: writes only what changed; at most one bar, fill and control per row.
+ * Decorates the row container (see rowBox), not necessarily the <a>. Color is drawn by our own
+ * absolutely positioned elements (above the row's own backgrounds, pointer-events:none), so ChatGPT's
+ * row styles are never modified, apart from position:relative on a static row.
+ * Returns the decorated element.
  */
 export function decorate(
   row: Row,
   color: string | null,
   title: string,
   onOpen: ((btn: HTMLButtonElement, row: Row) => void) | null,
-): void {
-  const { el, id } = row;
+): HTMLElement {
+  const el = rowBox(row.el) as HTMLElement;
+  const { id } = row;
   setAttr(el, ID_ATTR, id);
   setAttr(el, COLOR_ATTR, color ? '' : null);
   if (el.style.getPropertyValue('--crc-c') !== (color ?? '')) {
@@ -118,17 +162,10 @@ export function decorate(
     if (getComputedStyle(el).position === 'static') el.classList.add(POS_CLASS);
   }
 
-  const bar = child(el, BAR_CLASS);
-  if (color && !bar) {
-    const b = document.createElement('span');
-    b.className = BAR_CLASS;
-    b.setAttribute('aria-hidden', 'true');
-    el.append(b);
-  } else if (!color && bar) {
-    bar.remove();
-  }
+  ensureChild(el, FILL_CLASS, !!color);
+  ensureChild(el, BAR_CLASS, !!color);
 
-  if (!onOpen) return;
+  if (!onOpen) return el;
   let btn = child(el, BTN_CLASS) as HTMLButtonElement | null;
   if (!btn) {
     btn = document.createElement('button');
@@ -146,8 +183,9 @@ export function decorate(
     b.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      const a = b.parentElement;
-      const rid = a?.getAttribute(ID_ATTR);
+      const box = b.parentElement;
+      const rid = box?.getAttribute(ID_ATTR);
+      const a = box?.matches('a[href]') ? box : box?.querySelector(CANDIDATES);
       if (a instanceof HTMLAnchorElement && rid) onOpen(b, { el: a, id: rid });
     });
     // Native <button> turns Enter/Space into click; just keep the keys away from ChatGPT's shortcuts.
@@ -156,6 +194,7 @@ export function decorate(
   }
   setAttr(btn, 'aria-label', `Set color for ${title || 'conversation'}`);
   setAttr(btn, 'title', 'Set color');
+  return el;
 }
 
 /** Remove everything we added to this row. */
@@ -167,6 +206,7 @@ export function undecorate(el: Element): void {
   (el as HTMLElement).style?.removeProperty('--crc-c');
   child(el, BTN_CLASS)?.remove();
   child(el, BAR_CLASS)?.remove();
+  child(el, FILL_CLASS)?.remove();
 }
 
 export function decorated(root: ParentNode): Element[] {
@@ -206,7 +246,7 @@ function tree(el: Element, depth = 0): string[] {
   const out = [pad + describe(el)];
   for (const n of el.childNodes) {
     if (n.nodeType === Node.TEXT_NODE && n.nodeValue?.trim()) out.push(`${pad}  #text(${n.nodeValue.trim().length})`);
-    else if (n instanceof Element && !n.classList.contains(BTN_CLASS) && !n.classList.contains(BAR_CLASS)) out.push(...tree(n, depth + 1));
+    else if (n instanceof Element && ![BTN_CLASS, BAR_CLASS, FILL_CLASS].some((c) => n.classList.contains(c))) out.push(...tree(n, depth + 1));
   }
   return out;
 }
@@ -225,8 +265,9 @@ export function diagnose(doc: Document = document) {
   const sample = rows[0]?.el ?? anchors.find((a) => a.getAttribute('href')?.includes('/c/'));
   const ancestry: string[] = [];
   for (let p = sample?.parentElement; p && p !== doc.body && ancestry.length < 12; p = p.parentElement) ancestry.push(describe(p));
-  const cs = sample ? getComputedStyle(sample) : null;
-  const bar = sample?.querySelector(`:scope > .${BAR_CLASS}`);
+  const box = sample ? rowBox(sample) : null;
+  const cs = box ? getComputedStyle(box) : null;
+  const bar = box?.querySelector(`:scope > .${BAR_CLASS}`);
   return {
     path: maskPath(location.pathname),
     knownContainers: Object.fromEntries(ROOT_SELECTORS.map((s) => [s, !!doc.querySelector(s)])),
@@ -235,15 +276,19 @@ export function diagnose(doc: Document = document) {
     decorated: doc.querySelectorAll(`[${ID_ATTR}]`).length,
     colored: doc.querySelectorAll(`.${BAR_CLASS}`).length,
     conversationHrefShapes: Object.fromEntries([...shapes].slice(0, 12)),
-    sampleRow: sample ? tree(sample) : null,
+    sampleRow: box ? tree(box) : null,
+    sampleRowIsLink: box === sample,
     sampleAncestry: ancestry,
     sampleRowStyle: cs && {
       position: cs.position,
       display: cs.display,
       overflow: cs.overflow,
       zIndex: cs.zIndex,
-      width: Math.round(sample!.getBoundingClientRect().width),
-      height: Math.round(sample!.getBoundingClientRect().height),
+      borderRadius: cs.borderRadius,
+      paddingLeft: cs.paddingLeft,
+      width: Math.round(box!.getBoundingClientRect().width),
+      height: Math.round(box!.getBoundingClientRect().height),
+      linkWidth: Math.round(sample!.getBoundingClientRect().width),
     },
     barStyle: bar && (() => {
       const b = getComputedStyle(bar);

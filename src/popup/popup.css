@@ -387,8 +387,42 @@ input.mono { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; }
   background: var(--c);
   opacity: var(--o);
 }
+.p-row i {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--c) var(--f), transparent);
+}
+.p-row span { position: relative; }
+.preview[data-mode='bar'] .p-row i,
+.preview[data-mode='fill'] .p-row b { display: none; }
+.p-row b { z-index: 1; }
+
+.segmented {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  padding: 3px;
+  gap: 3px;
+  border-radius: var(--r);
+  background: var(--soft);
+  border: 1px solid var(--line);
+}
+.segmented label { position: relative; }
+.segmented input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.segmented span {
+  display: grid;
+  place-items: center;
+  height: 28px;
+  border-radius: var(--r-sm);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.segmented input:checked + span { background: var(--bg); color: var(--fg); box-shadow: 0 1px 2px rgb(0 0 0 / 0.08), 0 0 0 1px var(--line); }
+.segmented input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 1px; }
+.sliders .slider.off { opacity: 0.4; }
 .sliders { gap: 12px; }
-.slider { display: grid; grid-template-columns: 80px 1fr 44px; align-items: center; gap: 10px; font-size: 12.5px; }
+.slider { display: grid; grid-template-columns: 96px 1fr 44px; align-items: center; gap: 10px; font-size: 12.5px; }
 .slider output { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
 input[type='range'] { width: 100%; accent-color: var(--accent); margin: 0; }
 

@@ -62,9 +62,8 @@ export function createColorizer(set: SetOverride) {
     const rows = findRows(root);
     rowCount = rows.length;
     for (const row of rows) {
-      seen.add(row.el);
       const title = getTitle(row.el);
-      decorate(row, resolveColor(row.id, title, s).color, title, open);
+      seen.add(decorate(row, resolveColor(row.id, title, s).color, title, open));
     }
     // Rows whose href no longer points at a conversation (recycled nodes) lose our decoration.
     for (const el of decorated(root)) if (!seen.has(el)) undecorate(el);
@@ -76,7 +75,10 @@ export function createColorizer(set: SetOverride) {
       vars.id = 'crc-vars';
       document.head.append(vars);
     }
-    vars.textContent = `:root{--crc-w:${a.thickness}px;--crc-o:${a.opacity / 100};--crc-r:${a.radius}px}`;
+    vars.textContent =
+      `:root{--crc-w:${a.thickness}px;--crc-o:${a.opacity / 100};--crc-r:${a.radius}px;--crc-f:${a.fill}%}` +
+      (a.mode === 'bar' ? '.crc-fill{display:none!important}' : '') +
+      (a.mode === 'fill' ? '.crc-bar{display:none!important}' : '');
   }
 
   function stop(): void {

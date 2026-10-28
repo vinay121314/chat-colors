@@ -67,8 +67,12 @@ describe('migrate', () => {
   });
 
   it('clamps appearance values', () => {
-    const s = migrate({ appearance: { thickness: 99, opacity: -5, radius: 'x' } });
-    expect(s.appearance).toEqual({ thickness: 6, opacity: 10, radius: defaultSettings().appearance.radius });
+    const d = defaultSettings().appearance;
+    const s = migrate({ appearance: { thickness: 99, opacity: -5, radius: 'x', mode: 'neon', fill: 90 } });
+    expect(s.appearance).toEqual({ mode: d.mode, thickness: 6, opacity: 10, radius: d.radius, fill: 40 });
+    expect(migrate({ appearance: { mode: 'fill' } }).appearance.mode).toBe('fill');
+    // Settings saved before fill existed get the new defaults (bar + fill).
+    expect(migrate({ version: 1, appearance: { thickness: 3, opacity: 80, radius: 2 } }).appearance).toMatchObject({ mode: 'both', fill: 16, thickness: 3 });
   });
 
   it('is idempotent', () => {

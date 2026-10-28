@@ -16,7 +16,7 @@ A small Chrome extension (Manifest V3) that adds colored left borders to convers
 - **Automatic categories.** Starter categories are Work, Development, AI Tools, Personal, Urgent, Research, and Uncategorized as a fallback. You can create, rename, delete, recolor and reorder them. Keywords are case-insensitive, each one can be enabled or disabled, and a *Test a title* box previews which category matches.
 - **Precedence:** a manual color first, then the first matching enabled rule in priority order, then the fallback color.
 - **Stable IDs.** Colors are keyed by the conversation UUID from the URL, including Project and custom-GPT chats, so renaming a chat keeps its manual color while automatic colors update.
-- **Appearance:** bar thickness (2–6 px), opacity, roundness, a live preview, and a global on/off switch. The bar is the extension's own overlay element, so there's no layout shift and ChatGPT's row styles are never changed. Respects `prefers-reduced-motion`.
+- **Appearance:** *Bar*, *Fill* (a tinted row background), or *Bar + fill* (the default), with fill strength, bar width, opacity and roundness, plus a live preview and a global on/off switch. The color is drawn by the extension's own overlay elements on the whole row, so there's no layout shift and ChatGPT's row styles are never changed. Respects `prefers-reduced-motion`.
 - **Troubleshooting:** the popup's header shows how many chats were detected. *Data → Copy diagnostics* produces a structure-only report (no titles, ids masked) for bug reports.
 - **Import/export** settings as JSON, with validation.
 - **Private by design:** only the `storage` permission, runs only on `chatgpt.com`, no network requests. See [PRIVACY.md](PRIVACY.md).

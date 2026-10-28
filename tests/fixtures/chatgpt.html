@@ -19,6 +19,8 @@
       .row .truncate { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .row .opts { width: 24px; height: 24px; border: 0; background: none; color: inherit; opacity: 0; }
       .row:hover .opts { opacity: 1; }
+      .title-link { color: inherit; text-decoration: none; } /* link is only as wide as its text */
+      #inline-row .icon { width: 14px; opacity: 0.4; }
       main { flex: 1; padding: 24px; }
       @media (prefers-color-scheme: dark) {
         body { background: #212121; color: #ececec; }
@@ -45,6 +47,8 @@
             <a class="row" href="/g/g-p-0123456789abcdef0123456789abcdef-side-project/c/55555555-5555-4555-8555-555555555555"><div class="truncate">Urgent launch checklist</div><button class="opts" type="button" aria-label="Open conversation options">…</button></a>
             <a class="row" href="/g/g-AbCdEf123-code-helper/c/66666666-6666-4666-8666-666666666666"><div class="truncate">Research paper summary</div><button class="opts" type="button" aria-label="Open conversation options">…</button></a>
             <a class="row" href="/c/77777777-7777-4777-8777-777777777777"><div class="truncate">Prompt ideas for an LLM eval</div><button class="opts" type="button" aria-label="Open conversation options">…</button></a>
+            <!-- Layout where the <a> wraps only the title and the full-width row is its parent (reported live). -->
+            <div class="row" id="inline-row"><span class="icon">•</span><a class="title-link" href="/c/88888888-8888-4888-8888-888888888888">Weekly client report</a><button class="opts" type="button" aria-label="Open conversation options">…</button></div>
           </div>
         </nav>
       </aside>

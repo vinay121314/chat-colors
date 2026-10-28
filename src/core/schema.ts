@@ -19,10 +19,16 @@ export interface Category {
   rules: KeywordRule[];
 }
 
+export const MODES = ['bar', 'fill', 'both'] as const;
+export type Mode = (typeof MODES)[number];
+
 export interface Appearance {
+  /** bar = left edge only, fill = tinted row background, both. */
+  mode: Mode;
   thickness: number; // px, 2–6
-  opacity: number; // %, 10–100
-  radius: number; // px, 0–12
+  opacity: number; // %, 10–100 (bar)
+  radius: number; // px, 0–12 (bar)
+  fill: number; // %, 5–40 (fill tint strength)
 }
 
 export interface Settings {
@@ -84,7 +90,7 @@ export function defaultSettings(): Settings {
       cat('research', 'Research', '#0e9fb3', ['research', 'paper', 'study']),
     ],
     fallback: NEUTRAL,
-    appearance: { thickness: 4, opacity: 100, radius: 6 },
+    appearance: { mode: 'both', thickness: 4, opacity: 100, radius: 6, fill: 16 },
   };
 }
 
@@ -142,9 +148,11 @@ export function migrate(raw: unknown): Settings {
     categories,
     fallback: normOverride(raw.fallback) ?? d.fallback,
     appearance: {
+      mode: MODES.includes(a.mode as Mode) ? (a.mode as Mode) : d.appearance.mode,
       thickness: clampInt(a.thickness, 2, 6, d.appearance.thickness),
       opacity: clampInt(a.opacity, 10, 100, d.appearance.opacity),
       radius: clampInt(a.radius, 0, 12, d.appearance.radius),
+      fill: clampInt(a.fill, 5, 40, d.appearance.fill),
     },
   };
 }

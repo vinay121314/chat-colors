@@ -27,6 +27,24 @@
   transition: background-color 0.2s ease;
 }
 
+/*
+ * Fill: translucent tint over the whole row, following the row's own rounding. Painted above the
+ * row's backgrounds (so it can't be hidden by them) but kept light enough that text stays crisp.
+ */
+.crc-fill {
+  position: absolute !important;
+  inset: 0 !important;
+  display: block !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: inherit !important;
+  background: color-mix(in srgb, var(--crc-c) var(--crc-f, 16%), transparent) !important;
+  pointer-events: none !important;
+  z-index: 1 !important;
+  transition: background-color 0.2s ease;
+}
+
 /* In-row trigger: 24px hit area, subtle until hover/focus. */
 .crc-btn {
   all: unset;
@@ -61,13 +79,13 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--crc-c) 22%, transparent) !important;
 }
 
-a:not([data-crc-color]) > .crc-btn .crc-dot {
+[data-crc]:not([data-crc-color]) > .crc-btn .crc-dot {
   background: transparent !important;
   box-shadow: inset 0 0 0 1.5px color-mix(in srgb, currentColor 55%, transparent) !important;
 }
 
-a:hover > .crc-btn,
-a:focus-within > .crc-btn,
+[data-crc]:hover > .crc-btn,
+[data-crc]:focus-within > .crc-btn,
 .crc-btn:focus-visible,
 .crc-btn[aria-expanded='true'] {
   opacity: 1;
@@ -80,6 +98,7 @@ a:focus-within > .crc-btn,
 
 @media (prefers-reduced-motion: reduce) {
   .crc-bar,
+  .crc-fill,
   .crc-btn {
     transition: none !important;
   }
