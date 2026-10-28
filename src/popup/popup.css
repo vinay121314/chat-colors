@@ -363,6 +363,8 @@ input.mono { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; }
 .add svg { width: 14px; height: 14px; }
 .add:hover { color: var(--fg); border-color: var(--faint); background: var(--surface); }
 .fallback { display: flex; align-items: center; gap: 12px; }
+.hint-card { border-style: dashed; background: transparent; box-shadow: none; }
+#rules-hint[hidden] { display: none; }
 .inline { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
 
 /* ---------- Style panel ---------- */

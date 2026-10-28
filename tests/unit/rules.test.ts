@@ -1,31 +1,43 @@
-import { describe, expect, it } from 'vitest';
+﻿import { describe, expect, it } from 'vitest';
 import { matchCategory, resolveColor } from '../../src/core/rules';
-import { NEUTRAL, NONE, PALETTE, defaultSettings } from '../../src/core/schema';
+import { NEUTRAL, NONE, PALETTE, addStarterKeywords, defaultSettings } from '../../src/core/schema';
+
+/** Opt-in rules + neutral fallback: the configuration these behaviours are tested against. */
+const starter = () => ({ ...addStarterKeywords(defaultSettings()), fallback: NEUTRAL });
+
+describe('defaults', () => {
+  it('color nothing and categorize nothing out of the box', () => {
+    const s = defaultSettings();
+    expect(s.fallback).toBe(NONE);
+    expect(s.categories.every((c) => c.rules.length === 0)).toBe(true);
+    expect(resolveColor('11111111-1111-4111-8111-111111111111', 'urgent python client meeting', s)).toEqual({ color: null, source: 'fallback' });
+  });
+});
 
 const ID = '11111111-1111-4111-8111-111111111111';
 
 describe('resolveColor precedence', () => {
   it('manual override beats a matching rule', () => {
-    const s = defaultSettings();
+    const s = starter();
     s.overrides[ID] = '#ff00ff';
     expect(resolveColor(ID, 'Fix python bug', s)).toEqual({ color: '#ff00ff', source: 'manual' });
   });
 
   it('manual NONE removes the color even when a rule matches', () => {
-    const s = defaultSettings();
+    const s = starter();
     s.overrides[ID] = NONE;
     expect(resolveColor(ID, 'urgent', s)).toEqual({ color: null, source: 'manual' });
   });
 
   it('falls back to neutral, or to nothing when fallback is NONE', () => {
-    const s = defaultSettings();
+    const s = starter();
     expect(resolveColor(ID, 'Hello there', s)).toEqual({ color: NEUTRAL, source: 'fallback' });
     s.fallback = NONE;
     expect(resolveColor(ID, 'Hello there', s).color).toBeNull();
   });
 
   it('override lookup is case-insensitive on the id', () => {
-    const s = defaultSettings();
+    const s = starter();
     s.overrides[ID] = '#000000';
     expect(resolveColor(ID.toUpperCase(), '', s).source).toBe('manual');
   });
@@ -33,11 +45,11 @@ describe('resolveColor precedence', () => {
 
 describe('keyword matching', () => {
   it('is case-insensitive substring matching', () => {
-    expect(matchCategory('Fix TYPESCRIPT build', defaultSettings().categories)?.name).toBe('Development');
+    expect(matchCategory('Fix TYPESCRIPT build', starter().categories)?.name).toBe('Development');
   });
 
   it('uses category order as priority', () => {
-    const s = defaultSettings();
+    const s = starter();
     const title = 'URGENT: python bug';
     expect(matchCategory(title, s.categories)?.name).toBe('Development');
     const urgent = s.categories.findIndex((c) => c.name === 'Urgent');
@@ -46,7 +58,7 @@ describe('keyword matching', () => {
   });
 
   it('skips disabled categories and disabled rules', () => {
-    const s = defaultSettings();
+    const s = starter();
     const dev = s.categories.find((c) => c.name === 'Development')!;
     dev.rules.find((r) => r.keyword === 'python')!.enabled = false;
     expect(matchCategory('python notes', s.categories)).toBeUndefined();
@@ -56,13 +68,13 @@ describe('keyword matching', () => {
   });
 
   it('supports multiple keywords per category', () => {
-    const work = defaultSettings().categories.filter((c) => c.name === 'Work');
+    const work = starter().categories.filter((c) => c.name === 'Work');
     expect(matchCategory('client sync', work)?.name).toBe('Work');
     expect(matchCategory('weekly report', work)?.name).toBe('Work');
   });
 
   it('re-classifies on title change, manual stays stable', () => {
-    const s = defaultSettings();
+    const s = starter();
     expect(resolveColor(ID, 'python', s).category?.name).toBe('Development');
     expect(resolveColor(ID, 'trip travel plan', s).category?.name).toBe('Personal');
     s.overrides[ID] = '#abcdef';
@@ -83,7 +95,7 @@ const contrast = (a: string, b: string) => {
 };
 
 describe('default palette contrast (light and dark themes)', () => {
-  const colors = [...new Set([...PALETTE, NEUTRAL, ...defaultSettings().categories.map((c) => c.color)])];
+  const colors = [...new Set([...PALETTE, NEUTRAL, ...starter().categories.map((c) => c.color)])];
   it.each(colors)('%s is >= 3:1 on light and dark sidebars', (c) => {
     for (const bg of ['#ffffff', '#212121', '#171717']) expect(contrast(c, bg)).toBeGreaterThanOrEqual(3);
   });

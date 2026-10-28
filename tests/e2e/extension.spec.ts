@@ -3,6 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { test as base, chromium, expect, type BrowserContext, type Page } from '@playwright/test';
+import { NEUTRAL, addStarterKeywords, defaultSettings } from '../../src/core/schema';
 
 const DIST = resolve('dist');
 const FIXTURE = readFileSync(resolve('tests/fixtures/chatgpt.html'), 'utf8');
@@ -15,7 +16,14 @@ const ID = {
 };
 const rgb = (hex: string) => hex.toLowerCase();
 
-const test = base.extend<{ context: BrowserContext; extId: string }>({
+/**
+ * Most tests exercise auto-coloring, which is opt-in since v2. `seed: true` (default) stores the
+ * suggested keywords + a neutral fallback before any ChatGPT tab opens; `seed: false` = fresh install.
+ */
+const SEEDED = { ...addStarterKeywords(defaultSettings()), fallback: NEUTRAL };
+
+const test = base.extend<{ context: BrowserContext; extId: string; seed: boolean }>({
+  seed: [true, { option: true }],
   // eslint-disable-next-line no-empty-pattern
   context: async ({}, use) => {
     const context = await chromium.launchPersistentContext('', {
@@ -27,20 +35,27 @@ const test = base.extend<{ context: BrowserContext; extId: string }>({
     await use(context);
     await context.close();
   },
-  extId: async ({ context }, use) => {
-    // No service worker to read the id from, so ask chrome://extensions.
-    const p = await context.newPage();
-    await p.goto('chrome://extensions');
-    const id = await p.evaluate(
-      () =>
-        document
-          .querySelector('extensions-manager')!
-          .shadowRoot!.querySelector('extensions-item-list')!
-          .shadowRoot!.querySelector('extensions-item')!.id,
-    );
-    await p.close();
-    await use(id);
-  },
+  extId: [
+    async ({ context, seed }, use) => {
+      // No service worker to read the id from, so ask chrome://extensions.
+      const p = await context.newPage();
+      await p.goto('chrome://extensions');
+      const id = await p.evaluate(
+        () =>
+          document
+            .querySelector('extensions-manager')!
+            .shadowRoot!.querySelector('extensions-item-list')!
+            .shadowRoot!.querySelector('extensions-item')!.id,
+      );
+      if (seed) {
+        await p.goto(`chrome-extension://${id}/popup.html`);
+        await p.evaluate((s) => chrome.storage.local.set({ 'crc:settings': s }), SEEDED);
+      }
+      await p.close();
+      await use(id);
+    },
+    { auto: true },
+  ],
 });
 
 async function openChat(context: BrowserContext, path = `/c/${ID.ts}`): Promise<Page> {
@@ -323,7 +338,7 @@ test('popup: categories, rules, preview, priority, appearance, import/export', a
   await tab(popup, 'Data');
   const [download] = await Promise.all([popup.waitForEvent('download'), popup.locator('#export').click()]);
   const exported = JSON.parse(readFileSync((await download.path())!, 'utf8'));
-  expect(exported.version).toBe(1);
+  expect(exported.version).toBe(2);
   expect(exported.appearance.thickness).toBe(2);
 
   await popup.locator('#import').setInputFiles({ name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from('{"hello":1}') });
@@ -405,3 +420,32 @@ for (const scheme of ['light', 'dark'] as const) {
   });
 }
 
+
+
+test.describe('fresh install (no stored settings)', () => {
+  test.use({ seed: false });
+
+  test('colors nothing and categorizes nothing; manual color still works; suggestions are opt-in', async ({ context, extId }) => {
+    const p = await openChat(context);
+    await expect(p.locator('#ds-sidebar [data-crc]')).toHaveCount(8); // rows detected (controls injected)
+    await expect(p.locator('#ds-sidebar .crc-bar, #ds-sidebar .crc-fill')).toHaveCount(0); // nothing painted
+
+    // Manual color applies to just that chat.
+    const row = rowLoc(p, ID.meeting);
+    await row.hover();
+    await row.locator('.crc-btn').click();
+    await p.locator('#crc-picker-host [popover]').getByRole('button', { name: 'Work' }).click();
+    await expect.poll(() => shadowOf(p, ID.meeting)).toContain('#16a34a');
+    await expect(p.locator('#ds-sidebar .crc-bar')).toHaveCount(1);
+
+    // Rules tab explains auto-coloring is off and offers suggestions.
+    const popup = await openPopup(context, extId);
+    await tab(popup, 'Rules');
+    await expect(popup.locator('#rules-hint')).toBeVisible();
+    await popup.getByRole('button', { name: 'Load suggested keywords' }).click();
+    await expect(popup.locator('#rules-hint')).toBeHidden();
+    await p.bringToFront();
+    await expect.poll(() => shadowOf(p, ID.ts)).toContain('#2f7de1'); // "TypeScript" -> Development
+    expect(await shadowOf(p, ID.plain)).toBe('none'); // uncategorized stays uncolored
+  });
+});

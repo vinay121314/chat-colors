@@ -26,6 +26,28 @@ describe('migrate', () => {
     expect(s.overrides[ID]).toBe('#ff0000');
   });
 
+  it('v1 -> v2 removes only the old auto-coloring defaults, keeping user changes', () => {
+    const v1 = {
+      version: 1,
+      fallback: '#8a8a8a', // old default
+      overrides: { [ID]: '#ff0000' },
+      categories: [
+        { id: 'work', name: 'Work', color: '#16a34a', rules: ['meeting', 'client', 'report', 'email', 'standup'].map((keyword) => ({ keyword })) },
+        { id: 'urgent', name: 'Urgent', color: '#e03131', rules: [{ keyword: 'urgent' }, { keyword: 'asap' }] },
+        { id: 'mine', name: 'Mine', color: '#123456', rules: [{ keyword: 'client' }] },
+      ],
+    };
+    const s = migrate(v1);
+    expect(s.version).toBe(2);
+    expect(s.fallback).toBe(NONE);
+    expect(s.overrides[ID]).toBe('#ff0000');
+    expect(s.categories.map((c) => c.rules.map((r) => r.keyword))).toEqual([['standup'], [], ['client']]);
+    // A customised v1 fallback is kept.
+    expect(migrate({ version: 1, fallback: '#abcdef' }).fallback).toBe('#abcdef');
+    // v2 data is not touched by the v1 cleanup.
+    expect(migrate({ version: 2, fallback: '#8a8a8a', categories: v1.categories }).categories[1]!.rules).toHaveLength(2);
+  });
+
   it('refuses data from a newer schema version', () => {
     expect(() => migrate({ version: SCHEMA_VERSION + 1 })).toThrow(/newer version/);
   });

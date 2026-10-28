@@ -3,6 +3,7 @@ import {
   NEUTRAL,
   NONE,
   PALETTE,
+  addStarterKeywords,
   defaultSettings,
   migrate,
   newId,
@@ -215,6 +216,7 @@ function renderCurrent(): void {
 // ------------------------------------------------------------------ Rules tab
 
 function renderCategories(): void {
+  $('rules-hint').hidden = s.categories.some((c) => c.rules.length > 0);
   const n = s.categories.length;
   $('categories').replaceChildren(...s.categories.map((c, i) => categoryItem(c, i, n)));
 }
@@ -466,6 +468,7 @@ function wire(): void {
     name?.focus();
     name?.select();
   };
+  $('load-starter').onclick = () => commit((x) => void addStarterKeywords(x));
   $('fallback').onchange = () => commit((x) => (x.fallback = $('fallback').value));
   $('fallback-on').onchange = () => commit((x) => (x.fallback = $('fallback-on').checked ? $('fallback').value : NONE));
   for (const k of SLIDERS) {

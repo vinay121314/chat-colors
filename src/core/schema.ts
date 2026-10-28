@@ -1,6 +1,7 @@
 // Versioned settings schema, validation and migration. No DOM, no chrome.* here.
 
-export const SCHEMA_VERSION = 1;
+// v2: nothing is colored by default (no starter keywords, no fallback color).
+export const SCHEMA_VERSION = 2;
 
 /** Override value: a #rrggbb color, or NONE to force "no color" for that chat. */
 export const NONE = 'none';
@@ -64,34 +65,49 @@ export function normalizeHex(value: unknown): string | null {
   return '#' + (h.length === 3 ? [...h].map((c) => c + c).join('') : h);
 }
 
-const cat = (id: string, name: string, color: string, keywords: string[]): Category => ({
-  id,
-  name,
-  color,
-  enabled: true,
-  rules: keywords.map((keyword) => ({ keyword, enabled: true })),
-});
-
 // Mid-saturation hues chosen for >= 3:1 contrast on both #ffffff and #212121 (see tests).
 export const PALETTE = ['#16a34a', '#2f7de1', '#9b5de5', '#e8590c', '#e03131', '#0e9fb3', '#d6336c', '#b08900'];
 export const NEUTRAL = '#8a8a8a';
 
+/** Opt-in suggested keywords per starter category (also exactly what v1 shipped as defaults). */
+export const STARTER_KEYWORDS: Record<string, string[]> = {
+  work: ['meeting', 'client', 'report', 'email'],
+  development: ['code', 'bug', 'typescript', 'python', 'api'],
+  'ai-tools': ['prompt', 'gpt', 'llm', 'claude'],
+  personal: ['recipe', 'travel', 'health'],
+  urgent: ['urgent', 'asap'],
+  research: ['research', 'paper', 'study'],
+};
+
+const cat = (id: string, name: string, color: string): Category => ({ id, name, color, enabled: true, rules: [] });
+
+/** Starter categories are named colors for manual picking; nothing is auto-categorized until keywords are added. */
 export function defaultSettings(): Settings {
   return {
     version: SCHEMA_VERSION,
     enabled: true,
     overrides: {},
     categories: [
-      cat('work', 'Work', '#16a34a', ['meeting', 'client', 'report', 'email']),
-      cat('development', 'Development', '#2f7de1', ['code', 'bug', 'typescript', 'python', 'api']),
-      cat('ai-tools', 'AI Tools', '#9b5de5', ['prompt', 'gpt', 'llm', 'claude']),
-      cat('personal', 'Personal', '#e8590c', ['recipe', 'travel', 'health']),
-      cat('urgent', 'Urgent', '#e03131', ['urgent', 'asap']),
-      cat('research', 'Research', '#0e9fb3', ['research', 'paper', 'study']),
+      cat('work', 'Work', '#16a34a'),
+      cat('development', 'Development', '#2f7de1'),
+      cat('ai-tools', 'AI Tools', '#9b5de5'),
+      cat('personal', 'Personal', '#e8590c'),
+      cat('urgent', 'Urgent', '#e03131'),
+      cat('research', 'Research', '#0e9fb3'),
     ],
-    fallback: NEUTRAL,
+    fallback: NONE,
     appearance: { mode: 'both', thickness: 4, opacity: 100, radius: 6, fill: 16 },
   };
+}
+
+/** Adds the suggested keywords to matching starter categories (by id), skipping ones already present. */
+export function addStarterKeywords(s: Settings): Settings {
+  for (const c of s.categories) {
+    for (const keyword of STARTER_KEYWORDS[c.id] ?? []) {
+      if (!c.rules.some((r) => r.keyword.toLowerCase() === keyword)) c.rules.push({ keyword, enabled: true });
+    }
+  }
+  return s;
 }
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -126,7 +142,7 @@ export function migrate(raw: unknown): Settings {
   if (!isObj(raw)) return d;
   const version = typeof raw.version === 'number' ? raw.version : 0;
   if (version > SCHEMA_VERSION) throw new Error(`Settings are from a newer version (v${version}).`);
-  // v0 -> v1: nothing to transform yet; v0 means "unversioned", normalized below.
+  // v0 means "unversioned"; it is normalized below like v1.
 
   const overrides: Record<string, Override> = {};
   if (isObj(raw.overrides)) {
@@ -141,12 +157,22 @@ export function migrate(raw: unknown): Settings {
     ? raw.categories.flatMap((c) => normCategory(c, seen) ?? [])
     : d.categories;
   const a = isObj(raw.appearance) ? raw.appearance : {};
+  let fallback = normOverride(raw.fallback) ?? d.fallback;
+  if (version < 2) {
+    // v1 shipped auto-coloring on by default. Remove exactly those defaults; anything the user
+    // added or changed (custom keywords, a different fallback color) is kept.
+    if (fallback === NEUTRAL) fallback = NONE;
+    for (const c of categories) {
+      const starter = STARTER_KEYWORDS[c.id];
+      if (starter) c.rules = c.rules.filter((r) => !starter.includes(r.keyword));
+    }
+  }
   return {
     version: SCHEMA_VERSION,
     enabled: typeof raw.enabled === 'boolean' ? raw.enabled : d.enabled,
     overrides,
     categories,
-    fallback: normOverride(raw.fallback) ?? d.fallback,
+    fallback,
     appearance: {
       mode: MODES.includes(a.mode as Mode) ? (a.mode as Mode) : d.appearance.mode,
       thickness: clampInt(a.thickness, 2, 6, d.appearance.thickness),

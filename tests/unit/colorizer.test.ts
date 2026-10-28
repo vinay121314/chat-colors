@@ -1,6 +1,9 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+﻿import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createColorizer } from '../../src/content/colorizer';
-import { NEUTRAL, NONE, defaultSettings, type Settings } from '../../src/core/schema';
+import { NEUTRAL, NONE, addStarterKeywords, defaultSettings, type Settings } from '../../src/core/schema';
+
+/** Opt-in rules + neutral fallback: the configuration these behaviours are tested against. */
+const starter = (): Settings => ({ ...addStarterKeywords(defaultSettings()), fallback: NEUTRAL });
 import { ID, buildSidebar, mountPage, row, settle } from '../fixtures/sidebar';
 
 const color = (id: string) =>
@@ -11,7 +14,7 @@ const GREEN = '#16a34a'; // Work
 let c: ReturnType<typeof createColorizer>;
 afterEach(() => c?.stop());
 
-function start(s: Settings = defaultSettings()) {
+function start(s: Settings = starter()) {
   c = createColorizer(vi.fn());
   c.update(s);
   return s;
@@ -135,7 +138,7 @@ describe('colorizer on fixture sidebar', () => {
 
   it('manual NONE and fallback NONE leave rows uncolored but still controllable', () => {
     mountPage();
-    const s = defaultSettings();
+    const s = starter();
     s.fallback = NONE;
     s.overrides[ID.ts] = NONE;
     start(s);
