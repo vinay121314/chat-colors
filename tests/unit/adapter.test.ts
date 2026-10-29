@@ -6,6 +6,7 @@ import {
   diagnose,
   findRoot,
   findRows,
+  activeRow,
   getTitle,
   maskPath,
   parseChatGroup,
@@ -14,7 +15,7 @@ import {
   rowBox,
   undecorate,
 } from '../../src/content/adapter';
-import { ID, mountPage, row } from '../fixtures/sidebar';
+import { ID, mountLivePage, mountPage, row } from '../fixtures/sidebar';
 
 const U = '6735a0f2-1c3d-8007-9a6b-0123456789ab';
 
@@ -66,6 +67,59 @@ describe('Project / GPT parsing', () => {
   it.each(['/gpts', '/g/', '/g/x', `/g/${P}/c/${U}`, '/g/g-ab/project'])('%s is not an entry link', (href) =>
     expect(parseGroupLink(href)).toBeNull(),
   );
+});
+
+describe('verified live structure (logged-in diagnostics)', () => {
+  it('uses aside[data-app-shell-left-panel-appearance] as the root', () => {
+    mountLivePage();
+    expect(findRoot()?.matches('aside[data-app-shell-left-panel-appearance]')).toBe(true);
+  });
+
+  it('decorates the listitem wrapper (not the link), and never the message-body link', () => {
+    const { main } = mountLivePage();
+    const rows = findRows(findRoot()!);
+    expect(rows).toHaveLength(6);
+    for (const r of rows) {
+      expect(rowBox(r.el).getAttribute('role')).toBe('listitem');
+      expect(rowBox(r.el).hasAttribute('data-sidebar-cycle-item')).toBe(true);
+    }
+    const box = decorate(rows[0]!, '#ff0000', 'x', vi.fn());
+    expect(box.getAttribute('role')).toBe('listitem');
+    expect(rows[0]!.el.hasAttribute(ID_ATTR)).toBe(false);
+    expect(main.querySelector('[data-crc]')).toBeNull();
+  });
+
+  it('keeps the native menu button and adds exactly one control next to it', () => {
+    mountLivePage();
+    const r = findRows(findRoot()!)[0]!;
+    for (let i = 0; i < 3; i++) decorate(r, '#ff0000', 'x', vi.fn());
+    const box = rowBox(r.el);
+    expect(box.querySelectorAll('.crc-btn')).toHaveLength(1);
+    expect(box.querySelector('button[aria-label="Open conversation options"]')).not.toBeNull();
+  });
+
+  it('activeRow prefers aria-current="page" over the URL, never yields two, falls back to the URL', () => {
+    mountLivePage(ID.meeting);
+    const rows = findRows(findRoot()!);
+    expect(activeRow(rows, `/c/${ID.ts}`)?.id).toBe(ID.meeting); // marker wins over a stale URL
+    for (const r of rows) r.el.removeAttribute('aria-current');
+    expect(activeRow(rows, `/c/${ID.ts}`)?.id).toBe(ID.ts); // fallback when ChatGPT marks nothing
+    expect(activeRow(rows, '/')).toBeUndefined();
+  });
+
+  it('does not take a listitem that wraps several chats as one row', () => {
+    const list = document.createElement('div');
+    list.setAttribute('role', 'listitem');
+    const ul = document.createElement('ul');
+    const li1 = document.createElement('li');
+    const li2 = document.createElement('li');
+    li1.append(row(`/c/${ID.ts}`, 'a'));
+    li2.append(row(`/c/${ID.meeting}`, 'b'));
+    ul.append(li1, li2);
+    list.append(ul);
+    document.body.append(list);
+    expect(rowBox(li1.firstElementChild!)).toBe(li1);
+  });
 });
 
 describe('discovery', () => {

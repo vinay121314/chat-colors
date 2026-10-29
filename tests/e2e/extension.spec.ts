@@ -1,13 +1,9 @@
 // Loads the BUILT extension (dist/) into Chromium and runs it against a static fixture served at
 // https://chatgpt.com via request interception. This proves extension wiring, not live-site compatibility.
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { test as base, chromium, expect, type BrowserContext, type Page } from '@playwright/test';
-import { NEUTRAL, addStarterKeywords, defaultSettings } from '../../src/core/schema';
+import type { BrowserContext, Page } from '@playwright/test';
+import { SHOTS, expect, test } from './harness';
 
-const DIST = resolve('dist');
-const FIXTURE = readFileSync(resolve('tests/fixtures/chatgpt.html'), 'utf8');
-const SHOTS = resolve('docs/screenshots');
 const ID = {
   ts: '11111111-1111-4111-8111-111111111111',
   meeting: '22222222-2222-4222-8222-222222222222',
@@ -16,47 +12,6 @@ const ID = {
 };
 const rgb = (hex: string) => hex.toLowerCase();
 
-/**
- * Most tests exercise auto-coloring, which is opt-in since v2. `seed: true` (default) stores the
- * suggested keywords + a neutral fallback before any ChatGPT tab opens; `seed: false` = fresh install.
- */
-const SEEDED = { ...addStarterKeywords(defaultSettings()), fallback: NEUTRAL };
-
-const test = base.extend<{ context: BrowserContext; extId: string; seed: boolean }>({
-  seed: [true, { option: true }],
-  // eslint-disable-next-line no-empty-pattern
-  context: async ({}, use) => {
-    const context = await chromium.launchPersistentContext('', {
-      channel: 'chromium',
-      headless: true,
-      args: [`--disable-extensions-except=${DIST}`, `--load-extension=${DIST}`],
-    });
-    await context.route('https://chatgpt.com/**', (r) => r.fulfill({ contentType: 'text/html', body: FIXTURE }));
-    await use(context);
-    await context.close();
-  },
-  extId: [
-    async ({ context, seed }, use) => {
-      // No service worker to read the id from, so ask chrome://extensions.
-      const p = await context.newPage();
-      await p.goto('chrome://extensions');
-      const id = await p.evaluate(
-        () =>
-          document
-            .querySelector('extensions-manager')!
-            .shadowRoot!.querySelector('extensions-item-list')!
-            .shadowRoot!.querySelector('extensions-item')!.id,
-      );
-      if (seed) {
-        await p.goto(`chrome-extension://${id}/popup.html`);
-        await p.evaluate((s) => chrome.storage.local.set({ 'crc:settings': s }), SEEDED);
-      }
-      await p.close();
-      await use(id);
-    },
-    { auto: true },
-  ],
-});
 
 async function openChat(context: BrowserContext, path = `/c/${ID.ts}`): Promise<Page> {
   const p = await context.newPage();

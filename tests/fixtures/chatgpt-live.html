@@ -1,0 +1,65 @@
+<!doctype html>
+<!--
+  Fixture mirroring the VERIFIED logged-in ChatGPT sidebar (diagnostics, 2026-10-29):
+    aside[data-app-shell-left-panel-appearance]
+      … [role=list] > div[role=listitem][data-sidebar-cycle-item][data-thread-title-trigger] (~266x37)
+                         > a[href] (~247px, aria-current="page" on the open chat) + native "…" menu button
+  Styles/offsets of the native menu are an approximation. Project/GPT rows are UNVERIFIED and included
+  only to exercise those URL shapes. Titles are synthetic.
+  A document-level click handler simulates ChatGPT's SPA navigation, including moving aria-current.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>ChatGPT (live-structure fixture)</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { margin: 0; font: 14px/1.4 system-ui, sans-serif; display: flex; background: #fff; color: #0d0d0d; }
+      aside { width: 282px; height: 100vh; overflow: auto; background: #f9f9f9; padding: 8px 0; box-sizing: border-box; }
+      h2 { font-size: 12px; color: #8f8f8f; margin: 12px 16px 4px; font-weight: 500; }
+      [role='listitem'] { position: relative; width: 266px; height: 37px; margin: 0 8px; border-radius: 10px; display: flex; align-items: center; }
+      [role='listitem']:hover, [role='listitem']:has(a[aria-current='page']) { background: #ececec; }
+      [role='listitem'] > a { display: flex; align-items: center; width: 247px; height: 100%; padding: 0 10px; box-sizing: border-box; color: inherit; text-decoration: none; }
+      .truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .menu { position: absolute; right: 6px; top: 50%; margin-top: -12px; width: 24px; height: 24px; border: 0; border-radius: 6px; background: none; color: inherit; opacity: 0; }
+      [role='listitem']:hover .menu, .menu:focus-visible { opacity: 1; }
+      main { flex: 1; padding: 24px; }
+      @media (prefers-color-scheme: dark) {
+        body { background: #212121; color: #ececec; }
+        aside { background: #181818; }
+        [role='listitem']:hover, [role='listitem']:has(a[aria-current='page']) { background: #2a2a2a; }
+      }
+    </style>
+  </head>
+  <body>
+    <aside data-app-shell-left-panel-appearance="expanded">
+      <h2>Chats</h2>
+      <div role="list" id="list">
+        <div role="listitem" data-sidebar-cycle-item data-thread-title-trigger><a href="/c/11111111-1111-4111-8111-111111111111"><div class="truncate">Fix TypeScript bug in parser</div></a><button class="menu" type="button" aria-label="Open conversation options">…</button></div>
+        <div role="listitem" data-sidebar-cycle-item data-thread-title-trigger><a href="/c/22222222-2222-4222-8222-222222222222" aria-current="page"><div class="truncate">Client meeting notes</div></a><button class="menu" type="button" aria-label="Open conversation options">…</button></div>
+        <div role="listitem" data-sidebar-cycle-item data-thread-title-trigger><a href="/c/33333333-3333-4333-8333-333333333333"><div class="truncate">Weeknight recipe ideas</div></a><button class="menu" type="button" aria-label="Open conversation options">…</button></div>
+        <div role="listitem" data-sidebar-cycle-item data-thread-title-trigger><a href="/c/44444444-4444-4444-8444-444444444444"><div class="truncate">Hello there</div></a><button class="menu" type="button" aria-label="Open conversation options">…</button></div>
+        <div role="listitem" data-sidebar-cycle-item data-thread-title-trigger><a href="/g/g-p-0123456789abcdef0123456789abcdef-side-project/c/55555555-5555-4555-8555-555555555555"><div class="truncate">Urgent launch checklist</div></a><button class="menu" type="button" aria-label="Open conversation options">…</button></div>
+      </div>
+    </aside>
+    <main><p>Conversation body (never read by the extension).</p><a href="/c/99999999-9999-4999-8999-999999999999">link inside a message</a></main>
+    <script>
+      window.__navigations = 0;
+      window.__menu = 0;
+      document.addEventListener('click', (e) => {
+        if (e.target.closest('.menu')) {
+          window.__menu++;
+          return;
+        }
+        const a = e.target.closest('a');
+        if (!a) return;
+        e.preventDefault();
+        window.__navigations++;
+        history.pushState({}, '', a.getAttribute('href'));
+        // ChatGPT moves aria-current to the newly open chat.
+        document.querySelectorAll('aside a[aria-current]').forEach((x) => x.removeAttribute('aria-current'));
+        if (a.closest('aside')) a.setAttribute('aria-current', 'page');
+      });
+    </script>
+  </body>
+</html>

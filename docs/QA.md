@@ -44,9 +44,19 @@ Bugs found during this revision:
 
 | Item | Status |
 |---|---|
-| `aside#ds-sidebar` › `nav[data-slot="sidebar-history"]` exists | ✅ Verified live (logged-out page) |
-| Class names are generated atomic CSS and are not used | ✅ Verified live |
-| Logged-in row markup, URL formats, title location | ⏳ **UNVERIFIED**. Use *Data → Copy diagnostics* on your account to confirm. |
-| Control position vs. native row menu | ⏳ **UNVERIFIED** |
+Source: a logged-in diagnostics report from the user's own Chrome (2026-10-29). That report summarized results; it did not include raw DOM.
 
-**Live ChatGPT compatibility is unverified** until a diagnostics report from a logged-in session is reviewed.
+| Item | Status |
+|---|---|
+| Sidebar root is `aside[data-app-shell-left-panel-appearance]`. The older `#ds-sidebar` / history-nav containers are absent when logged in. | ✅ Verified live. Now the first selector; the others remain as fallbacks. |
+| Row = non-link wrapper `role="listitem"` + `data-sidebar-cycle-item` + `data-thread-title-trigger` (~266×37) around the `<a>` (~247 px) | ✅ Verified live. `rowBox()` prefers this wrapper. |
+| Regular `/c/<uuid>` links detected and decorated (25 rows, 2 colored) | ✅ Verified live |
+| Open chat's link has `aria-current="page"` | ✅ Verified live. Used by `activeRow()`, with the URL as fallback. |
+| Navigation API available | ✅ Verified live |
+| No unrecognized `/g/` links | ✅ Verified live (report) |
+| **Project** chats and Project entries | ⏳ **UNVERIFIED**. The report didn't include Project or GPT chat counts. |
+| **Custom GPT** chats and GPT entries | ⏳ **UNVERIFIED** |
+| Dot position vs. native three-dot menu | ⏳ **Visually unverified live.** Covered by the live-structure fixture with an approximate menu offset. |
+| Class names are generated atomic CSS and are not used | ✅ Verified live |
+
+The fixture `tests/fixtures/chatgpt-live.html` and the suite `tests/e2e/live-structure.spec.ts` reproduce the verified structure: decoration target, no layout shift, the native menu still works, and the dot sits clear of it. That is a fixture, not proof of compatibility with chatgpt.com itself.

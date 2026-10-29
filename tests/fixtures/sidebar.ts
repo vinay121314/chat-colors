@@ -66,6 +66,37 @@ export function mountPage(): { aside: HTMLElement; list: HTMLElement; main: HTML
   return { aside, list, main };
 }
 
+/**
+ * Mirrors the VERIFIED logged-in structure (diagnostics, 2026-10-29):
+ * aside[data-app-shell-left-panel-appearance] > … > [role=list] >
+ *   div[role=listitem][data-sidebar-cycle-item][data-thread-title-trigger] > a[href][aria-current] + menu button.
+ * The open chat's link carries aria-current="page". Titles synthetic.
+ */
+export function mountLivePage(openId: string = ID.meeting): { aside: HTMLElement; list: HTMLElement; main: HTMLElement } {
+  const aside = document.createElement('aside');
+  aside.setAttribute('data-app-shell-left-panel-appearance', 'expanded');
+  const list = document.createElement('div');
+  list.setAttribute('role', 'list');
+  for (const [href, title] of ROWS) {
+    const item = document.createElement('div');
+    item.setAttribute('role', 'listitem');
+    item.setAttribute('data-sidebar-cycle-item', '');
+    item.setAttribute('data-thread-title-trigger', '');
+    const a = row(href, title);
+    if (href.endsWith(openId)) a.setAttribute('aria-current', 'page');
+    const menu = document.createElement('button');
+    menu.type = 'button';
+    menu.setAttribute('aria-label', 'Open conversation options');
+    item.append(a, menu);
+    list.append(item);
+  }
+  aside.append(list);
+  const main = document.createElement('main');
+  main.append(row(`/c/${ID.main}`, 'Fix TypeScript bug (link in a message)'));
+  document.body.append(aside, main);
+  return { aside, list, main };
+}
+
 export const nextFrame = () => new Promise<void>((r) => requestAnimationFrame(() => r()));
 /** Mutation observer callbacks are microtasks; then our rAF batch. */
 export const settle = async () => {

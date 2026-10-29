@@ -8,7 +8,19 @@
 // UNVERIFIED (logged-in): Project / custom GPT entries are `<a href="/g/<gizmo>/project">` / `<a href="/g/<gizmo>">`.
 import { GROUP_PATTERN, ID_PATTERN, normalizeId } from '../core/schema';
 
-const ROOT_SELECTORS = ['#ds-sidebar', 'nav[data-slot="sidebar-history"]', 'nav[aria-label="Chat history"]', '#history'];
+// Verified live (logged-in diagnostics, 2026-10-29): the sidebar root is
+// `aside[data-app-shell-left-panel-appearance]`; each conversation row is a non-link wrapper with
+// `role="listitem"`, `data-sidebar-cycle-item`, `data-thread-title-trigger` (~266x37) around the <a>
+// (~247px wide); the open chat's link has `aria-current="page"`. The other selectors are fallbacks.
+const ROOT_SELECTORS = [
+  'aside[data-app-shell-left-panel-appearance]',
+  '#ds-sidebar',
+  'nav[data-slot="sidebar-history"]',
+  'nav[aria-label="Chat history"]',
+  '#history',
+];
+/** Verified live row wrappers, preferred over the structural heuristic in rowBox(). */
+const ROW_SELECTOR = '[data-sidebar-cycle-item], [role="listitem"]';
 const CONV_PATH = new RegExp(`^/(?:g/([^/]+)/)?c/(${ID_PATTERN})/?$`);
 const GROUP_PATH = /^\/g\/([^/]+)(?:\/project)?\/?$/;
 /** `g-p-<hex>-my-project` -> key `g-p-<hex>`, slug `my project`. */
@@ -153,6 +165,23 @@ function convCount(el: Element): number {
   return n;
 }
 
+const marked = (a: Element) => {
+  const v = a.getAttribute('aria-current');
+  return v === 'page' || v === 'true';
+};
+
+/**
+ * The row for the conversation open in this tab. If ChatGPT marks any row with
+ * `aria-current="page"` (verified live), only that marker is trusted; otherwise fall back to the URL.
+ * Decided across the whole list so a stale URL can never produce a second "active" row.
+ */
+export function activeRow<R extends { el: Element; id: string }>(rows: R[], path: string = location.pathname): R | undefined {
+  const byMarker = rows.find((r) => marked(r.el));
+  if (byMarker) return byMarker;
+  const id = parseConversationId(path);
+  return id ? rows.find((r) => r.id === id) : undefined;
+}
+
 /** The chat/Project/GPT link a decorated row container stands for. */
 function primaryLink(box: Element): HTMLAnchorElement | null {
   if (box instanceof HTMLAnchorElement && isTarget(box)) return box;
@@ -167,6 +196,13 @@ function primaryLink(box: Element): HTMLAnchorElement | null {
 export function rowBox(a: Element): Element {
   const cached = boxes.get(a);
   if (cached?.isConnected && cached.contains(a)) return cached;
+  // 1. Verified live wrapper, as long as it really is this one row (holds no other chat/Project link).
+  const known = a.closest(ROW_SELECTOR);
+  if (known && !known.matches(ROW_STOP) && convCount(known) === 1) {
+    boxes.set(a, known);
+    return known;
+  }
+  // 2. Structural heuristic for other layouts.
   const ah = a.getBoundingClientRect().height;
   let box = a;
   for (let p = a.parentElement; p && !p.matches(ROW_STOP); p = p.parentElement) {
