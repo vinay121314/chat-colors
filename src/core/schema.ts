@@ -348,7 +348,7 @@ export function parseImport(text: string): Settings {
     throw new Error('File is not valid JSON.');
   }
   if (!isObj(raw) || !('categories' in raw || 'overrides' in raw || 'groups' in raw || 'chats' in raw)) {
-    throw new Error('File is not a ChatGPT Recents Colorizer export.');
+    throw new Error('File is not a Chat Colors export.');
   }
   return migrate(raw);
 }

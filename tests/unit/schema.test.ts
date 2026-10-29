@@ -233,7 +233,7 @@ describe('parseImport / export round trip', () => {
   });
   it('rejects non-JSON', () => expect(() => parseImport('{oops')).toThrow(/not valid JSON/));
   it('rejects unrelated JSON instead of silently resetting', () => {
-    expect(() => parseImport('{"hello":1}')).toThrow(/not a ChatGPT Recents Colorizer export/);
+    expect(() => parseImport('{"hello":1}')).toThrow(/not a Chat Colors export/);
     expect(() => parseImport('[1,2]')).toThrow();
   });
   it('rejects exports from a newer version', () => {

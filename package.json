@@ -1,7 +1,7 @@
 {
-  "name": "chatgpt-recents-colorizer",
+  "name": "chat-colors",
   "version": "1.0.0",
-  "description": "Color-code ChatGPT sidebar conversations with manual colors and local keyword rules.",
+  "description": "Chat Colors: color-code ChatGPT sidebar conversations with manual colors and local keyword rules.",
   "license": "MIT",
   "private": true,
   "type": "module",

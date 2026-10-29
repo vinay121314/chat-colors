@@ -1,6 +1,8 @@
-# ChatGPT Recents Colorizer
+# Chat Colors
 
-A small Chrome extension (Manifest V3) that adds colored left borders to conversations in the ChatGPT sidebar. You can set colors by hand or let local keyword rules assign them.
+<img src="public/icons/icon.svg" alt="" width="64" height="64">
+
+Chat Colors is a small Chrome extension (Manifest V3) for ChatGPT that adds colored left borders to conversations in the ChatGPT sidebar. You can set colors by hand or let local keyword rules assign them.
 
 > **Live ChatGPT compatibility: see [QA status](#qa-status).** Automated tests run against fixture pages, not the live site.
 
@@ -90,7 +92,7 @@ Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/TESTING.md](docs/TESTIN
 1. Bump `version` in both `package.json` and `public/manifest.json`.
 2. Run `npm run check && npm run test:e2e`.
 3. Smoke-test the build on live chatgpt.com (load unpacked, color a chat, reload, rename).
-4. Zip the **contents** of `dist/`, for example `cd dist && zip -r ../chatgpt-recents-colorizer-<version>.zip .`.
+4. Zip the **contents** of `dist/`, for example `cd dist && zip -r ../chat-colors-<version>.zip .`.
 5. Tag `v<version>` and attach the zip to the GitHub release. Chrome Web Store upload is a separate, manual step.
 
 ## QA status

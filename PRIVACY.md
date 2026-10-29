@@ -1,6 +1,6 @@
 # Privacy
 
-ChatGPT Recents Colorizer has **no backend, no telemetry, no analytics and makes no network requests**. Nothing leaves your browser.
+Chat Colors has **no backend, no telemetry, no analytics and makes no network requests**. Nothing leaves your browser.
 
 ## Permissions
 

@@ -1,13 +1,14 @@
 {
   "manifest_version": 3,
-  "name": "ChatGPT Recents Colorizer",
+  "name": "Chat Colors",
+  "short_name": "Chat Colors",
   "version": "1.0.0",
-  "description": "Color-code ChatGPT conversations in the sidebar with manual colors and local keyword rules. No data leaves your browser.",
+  "description": "Color-code your ChatGPT sidebar conversations with manual colors and local keyword rules. No data leaves your browser.",
   "minimum_chrome_version": "114",
   "permissions": ["storage"],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "ChatGPT Recents Colorizer"
+    "default_title": "Chat Colors"
   },
   "content_scripts": [
     {

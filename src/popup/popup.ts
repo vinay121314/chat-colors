@@ -1000,7 +1000,7 @@ function wire(): void {
   $('export').onclick = () => {
     const data = migrate(JSON.parse(JSON.stringify(s))); // export only what passes validation
     const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
-    h('a', { href: url, download: `chatgpt-recents-colorizer-${new Date().toISOString().slice(0, 10)}.json` }).click();
+    h('a', { href: url, download: `chat-colors-${new Date().toISOString().slice(0, 10)}.json` }).click();
     setTimeout(() => URL.revokeObjectURL(url), 5000);
     setNote('Exported.');
   };
