@@ -1,6 +1,6 @@
 # Chat Colors
 
-<img src="public/icons/icon.svg" alt="" width="64" height="64">
+<img src="public/icons/icon-128.png" alt="" width="64" height="64">
 
 Chat Colors is a small Chrome extension (Manifest V3) for ChatGPT that adds colored left borders to conversations in the ChatGPT sidebar. You can set colors by hand or let local keyword rules assign them.
 
@@ -67,7 +67,6 @@ The extension reads only sidebar conversation links and their visible titles. It
 - Presenter Mode conceals sidebar rows the extension recognizes. It doesn't hide the conversation title ChatGPT shows in the browser tab or in the page header. The shortcut only works while a ChatGPT tab has focus; a global shortcut would need a background worker, which the extension doesn't have.
 - Recently revisited counts visits only while the extension is installed and enabled, per browser profile.
 - Colors are set in the popup, not from ChatGPT's own three-dot menu. Adding an item there was judged too fragile without verified access to that menu's markup.
-- There is no extension icon yet, so Chrome shows a default letter icon.
 
 ## Development
 

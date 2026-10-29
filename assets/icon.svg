@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!-- Chat Colors: two overlapping speech bubbles; the overlap is their mixed color. Original artwork. -->
+  <defs>
+    <path id="back" d="M28 12h48a20 20 0 0 1 20 20v28a20 20 0 0 1-20 20H40L18 98l4-20A20 20 0 0 1 8 60V32a20 20 0 0 1 20-20Z" />
+    <path id="front" d="M52 40h48a20 20 0 0 1 20 20v28a20 20 0 0 1-14 19l4 21-22-20H52a20 20 0 0 1-20-20V60a20 20 0 0 1 20-20Z" />
+    <clipPath id="clip-front"><use href="#front" /></clipPath>
+  </defs>
+  <use href="#back" fill="#3b82f6" />
+  <use href="#front" fill="#f43f5e" />
+  <use href="#back" fill="#8b5cf6" clip-path="url(#clip-front)" />
+</svg>
