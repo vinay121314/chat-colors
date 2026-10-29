@@ -3,7 +3,7 @@
 // fixture's DOM, not live-site compatibility.
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { test as base, chromium, type BrowserContext } from '@playwright/test';
+import { test as base, chromium, type BrowserContext, type Page } from '@playwright/test';
 import { NEUTRAL, addStarterKeywords, defaultSettings } from '../../src/core/schema';
 
 export { expect } from '@playwright/test';
@@ -51,3 +51,24 @@ export const test = base.extend<{ context: BrowserContext; extId: string; seed: 
     { auto: true },
   ],
 });
+
+
+/**
+ * Popup opened as a tab, with "active tab" resolved to the ChatGPT tab. Test-only: a real action
+ * popup's active tab IS the ChatGPT tab; a popup opened as a tab can't reproduce that.
+ */
+export async function openPopupForChat(context: BrowserContext, extId: string): Promise<Page> {
+  const popup = await context.newPage();
+  await popup.addInitScript(() => {
+    const query = chrome.tabs.query.bind(chrome.tabs);
+    chrome.tabs.query = (async (info: chrome.tabs.QueryInfo) => {
+      const all = await query({});
+      if (!info.active) return all;
+      for (const t of all) if (await chrome.tabs.sendMessage(t.id!, { type: 'crc:current' }).catch(() => null)) return [t];
+      return [];
+    }) as typeof chrome.tabs.query;
+  });
+  await popup.goto(`chrome-extension://${extId}/popup.html`);
+  await popup.locator('#categories li').first().waitFor({ state: 'attached' });
+  return popup;
+}

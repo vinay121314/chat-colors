@@ -457,6 +457,74 @@ input.mono { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; }
 .chat-editor { display: grid; gap: 10px; padding: 10px 12px 12px; border-top: 1px solid var(--line); background: var(--bg); }
 .chat-editor .actions { margin: 2px -12px -12px; }
 
+/* ---------- Header actions / Presenter toggle ---------- */
+.top-actions { display: flex; align-items: center; gap: 8px; }
+.presenter-btn svg { width: 16px; height: 16px; }
+.presenter-btn .slash { opacity: 0; }
+.presenter-btn[aria-pressed='true'] { background: var(--accent); color: var(--on-accent); }
+.presenter-btn[aria-pressed='true'] .slash { opacity: 1; }
+.presenter-btn[aria-pressed='true']:hover { background: var(--accent); color: var(--on-accent); opacity: 0.88; }
+.select-row select {
+  grid-column: 2 / 4;
+  height: 30px;
+  border-radius: var(--r);
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  font-size: 12.5px;
+  padding: 0 8px;
+}
+.select-row { grid-template-columns: 96px 1fr; }
+
+/* Presenter mode also conceals titles inside the popup (screen sharing). */
+body.presenter .chat-title,
+body.presenter .convo-title { filter: blur(5px); transition: filter 0.12s; }
+body.presenter.presenter-reveal .chat-row:hover .chat-title,
+body.presenter.presenter-reveal .chat-row:focus-visible .chat-title,
+body.presenter.presenter-reveal .convo-head:hover .convo-title { filter: none; }
+
+/* ---------- Working Set ---------- */
+.views { display: flex; flex-wrap: wrap; gap: 4px; }
+.view-chip {
+  all: unset;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+.view-chip:hover { color: var(--fg); border-color: var(--line-strong); }
+.view-chip[aria-pressed='true'] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.view-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wstatus { flex: none; font-size: 10.5px; font-weight: 600; padding: 1px 7px; border-radius: 999px; border: 1px solid; }
+.wstatus.st-active, .st-dot.st-active { --st: var(--ok); }
+.wstatus.st-hold, .st-dot.st-hold { --st: var(--warn); }
+.wstatus.st-done, .st-dot.st-done { --st: var(--muted); }
+.st-dot.st-none { --st: transparent; box-shadow: inset 0 0 0 1.5px var(--line-strong); }
+.wstatus { color: var(--st); border-color: color-mix(in srgb, var(--st) 40%, transparent); background: color-mix(in srgb, var(--st) 10%, transparent); }
+.chip .st-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--st); }
+.segmented.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.segmented.four span { font-size: 11.5px; }
+
+/* ---------- Bulk selection ---------- */
+.bulk-bar { display: grid; gap: 8px; }
+.bulk-bar:empty { display: none; }
+.bulk-top { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.bulk-count { margin-left: auto; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.bulk-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.bulk-status { display: flex; gap: 4px; flex-wrap: wrap; }
+.btn.sm { height: 26px; padding: 0 9px; font-size: 12px; }
+.bulk-editor { border: 1px solid var(--line); border-radius: var(--r-lg); }
+.chat-line { display: flex; align-items: center; }
+.chat-line .sel { flex: none; margin: 0 0 0 12px; accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
+.chat-line .chat-row { flex: 1; min-width: 0; padding-left: 10px; }
+.chat.selected .chat-line { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+
 /* ---------- Outline controls ---------- */
 .outline-colors { display: grid; gap: 8px; }
 .sw.auto { background: linear-gradient(135deg, var(--fg) 50%, var(--bg) 50%); box-shadow: inset 0 0 0 1px var(--line-strong); }

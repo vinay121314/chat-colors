@@ -139,11 +139,13 @@ test('Chats tab: invalid HEX is rejected; search narrows the list; keyboard oper
   await tab(popup, 'Chats');
   await popup.locator('#chat-search').fill('recipe');
   await expect(popup.locator('#chat-list .chat-row')).toHaveCount(1);
-  await expect(popup.locator('#chat-note')).toHaveText('1 of 8 chats match.');
+  await expect(popup.locator('#chat-note')).toHaveText('1 of 8 chats shown.');
   await popup.locator('#chat-search').fill('');
 
-  // Keyboard: Tab from search into the list, Enter opens the editor.
-  await popup.locator('#chat-search').focus();
+  // Keyboard: Tab from the first row's selection checkbox reaches the row; Enter opens the editor.
+  await popup.locator('#chat-list .sel').first().focus();
+  await popup.keyboard.press('Space');
+  await expect(popup.locator('#chat-list .sel').first()).toBeChecked(); // selection is keyboard operable
   await popup.keyboard.press('Tab');
   await expect(popup.locator('#chat-list .chat-row').first()).toBeFocused();
   await popup.keyboard.press('Enter');

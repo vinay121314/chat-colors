@@ -21,7 +21,12 @@
           <p id="status" class="status" data-tone="idle" aria-live="polite"><i></i><span>Checking…</span></p>
         </div>
       </div>
-      <input type="checkbox" id="enabled" class="switch" role="switch" aria-label="Enable coloring" />
+      <div class="top-actions">
+        <button type="button" id="presenter-toggle" class="icon-btn presenter-btn" aria-pressed="false" aria-label="Presenter mode: hide chat titles" title="Presenter mode: hide chat titles">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8s2.2-4 6-4 6 4 6 4-2.2 4-6 4-6-4-6-4Z" fill="none" stroke="currentColor" stroke-width="1.5" /><circle cx="8" cy="8" r="1.8" fill="currentColor" /><path class="slash" d="M3 13 13 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
+        </button>
+        <input type="checkbox" id="enabled" class="switch" role="switch" aria-label="Enable coloring" />
+      </div>
     </header>
 
     <div class="tabs" role="tablist" aria-label="Sections">
@@ -42,6 +47,8 @@
           <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5" /><path d="m10.5 10.5 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
           <input type="text" id="chat-search" placeholder="Search chats in the sidebar…" aria-label="Search chats" autocomplete="off" />
         </div>
+        <div id="chat-views" class="views" role="group" aria-label="Show chats"></div>
+        <div id="bulk-bar" class="bulk-bar"></div>
         <ul id="chat-list" class="chat-list" aria-label="Chats in the sidebar"></ul>
         <p id="chat-note" class="sub"></p>
       </section>
@@ -112,6 +119,26 @@
             <label class="slider" data-for="outline"><span>Outline opacity</span><input type="range" id="outlineOpacity" min="20" max="100" step="5" /><output id="outlineOpacity-v"></output></label>
           </div>
         </div>
+
+        <div class="group">
+          <p class="eyebrow">Presenter mode</p>
+          <div class="card sliders" id="presenter-card">
+            <label class="slider toggle-row"><span>Hide chat titles in the sidebar</span><span></span><input type="checkbox" id="presenter" class="switch sm" role="switch" /></label>
+            <div class="segmented two" role="radiogroup" aria-label="How titles are hidden" data-for="presenter">
+              <label><input type="radio" name="conceal" value="blur" /><span>Blur</span></label>
+              <label><input type="radio" name="conceal" value="dots" /><span>Dots</span></label>
+            </div>
+            <label class="slider" data-for="blur"><span>Blur strength</span><input type="range" id="strength" min="2" max="12" step="1" /><output id="strength-v"></output></label>
+            <label class="slider toggle-row" data-for="presenter"><span>Reveal on hover or keyboard focus</span><span></span><input type="checkbox" id="reveal" class="switch sm" role="switch" /></label>
+            <label class="slider select-row"><span>Shortcut</span><select id="shortcut" aria-label="Presenter mode shortcut">
+              <option value="Alt+Shift+P">Alt + Shift + P</option>
+              <option value="Alt+Shift+H">Alt + Shift + H</option>
+              <option value="Ctrl+Alt+P">Ctrl + Alt + P</option>
+              <option value="off">Off</option>
+            </select></label>
+            <p class="sub">The shortcut works while a ChatGPT tab has focus. Colors, outline and filters stay visible.</p>
+          </div>
+        </div>
       </section>
 
       <section role="tabpanel" id="panel-data" aria-labelledby="tab-data" hidden>
@@ -124,6 +151,15 @@
             <input type="file" id="import" accept="application/json,.json" hidden />
           </div>
           <p id="io-status" class="note" role="status"></p>
+        </div>
+
+        <div class="group">
+          <p class="eyebrow">Recently revisited</p>
+          <div class="card">
+            <label class="row"><span class="grow label">Remember chats I revisit</span><input type="checkbox" id="history" class="switch sm" role="switch" /></label>
+            <p class="sub">Stores only conversation IDs, visit times and counts on this device. No titles or messages. Never exported. Up to 500 chats, 90 days.</p>
+            <div class="row"><span id="history-count" class="sub grow"></span><button type="button" id="history-clear" class="btn">Clear history</button></div>
+          </div>
         </div>
 
         <div class="group">

@@ -11,11 +11,32 @@ import {
   newId,
   normalizeHex,
   parseImport,
+  STATUS_LABEL,
+  chatKey,
+  setStatus,
+  statusOf,
   type Category,
+  type Conceal,
   type Mode,
   type Settings,
+  type Shortcut,
+  type Status,
 } from '../core/schema';
-import { MSG_CURRENT, MSG_DIAG, MSG_LIST, load, onChange, onFilter, save, saveFilter, update } from '../core/storage';
+import {
+  MSG_CURRENT,
+  MSG_DIAG,
+  MSG_LIST,
+  VISITS_KEY,
+  clearVisits,
+  load,
+  loadVisits,
+  onChange,
+  onFilter,
+  save,
+  saveFilter,
+  update,
+} from '../core/storage';
+import { ago, revisited, type Visits } from '../core/visits';
 
 const SLIDERS = ['fill', 'thickness', 'opacity', 'radius', 'outlineWidth', 'outlineOpacity'] as const;
 const PERCENT = new Set<string>(['fill', 'opacity', 'outlineOpacity']);
@@ -38,6 +59,12 @@ let scope: 'chat' | 'group' = 'chat';
 /** Chats tab: sidebar conversations (null = not on ChatGPT), the expanded one, and the search text. */
 let chats: ListEntry[] | null = null;
 let openChatId: string | null = null;
+/** Chats tab: multi-select (conversation ids), current view, bulk color editor open. */
+const selected = new Set<string>();
+let chatView: 'all' | 'recent' | Status | 'none' = 'all';
+let bulkEditor = false;
+/** Recently Revisited (device-local). */
+let visits: Visits = {};
 
 const $ = <T extends HTMLElement = HTMLInputElement>(id: string) => document.getElementById(id) as T;
 
@@ -203,6 +230,17 @@ function renderFilter(): HTMLElement | null {
     b.setAttribute('aria-pressed', String(active));
     return b;
   };
+  // Working Set status filters (counts over chats loaded in the sidebar).
+  const count = (st: Status | 'none') => chats?.filter((c) => (statusOf(s, chatKey(c.id)) ?? 'none') === st).length ?? null;
+  const statusChips = (['active', 'hold', 'done', 'none'] as const).map((st) => {
+    const v = `status:${st}`;
+    const b = btn('', () => void saveFilter(v), { cls: 'chip', key: `flt:${v}` });
+    b.append(h('i', { cls: `st-dot st-${st}` }), h('span', { textContent: STATUS_LABEL[st] }));
+    const n = count(st);
+    if (n !== null) b.append(h('span', { cls: 'n', textContent: String(n) }));
+    b.setAttribute('aria-pressed', String(current!.filter === v));
+    return b;
+  });
   return h(
     'div',
     { cls: 'card' },
@@ -213,6 +251,8 @@ function renderFilter(): HTMLElement | null {
       chip('All chats', null, null, !current.filter, 'flt:all'),
       ...current.legend.map((l) => chip(l.label, l.color, l.count, current!.filter === l.color, `flt:${l.color}`)),
     ),
+    h('p', { cls: 'eyebrow', textContent: 'By working set' }),
+    h('div', { cls: 'chips' }, ...statusChips),
   );
 }
 
@@ -316,7 +356,8 @@ function renderCurrent(): void {
       resetLabel: scope === 'group' ? `Clear ${g!.kind} color` : 'Reset to automatic',
     }),
   );
-  box.replaceChildren(h('div', { cls: 'card' }, head), card, ...(filterCard ? [filterCard] : []));
+  const status = statusSwitch(statusOf(s, chatKey(id)), (next) => setStatuses([id], next), 'cur');
+  box.replaceChildren(h('div', { cls: 'card' }, head, status), card, ...(filterCard ? [filterCard] : []));
 }
 
 function renderGroups(): void {
@@ -358,41 +399,178 @@ function renderGroups(): void {
 
 // ------------------------------------------------------------------ Chats tab
 
-/** Every conversation loaded in the sidebar; colors any of them, open or not. */
+type ChatView = Status | 'none' | 'all' | 'recent';
+const VIEWS: [ChatView, string][] = [
+  ['all', 'All'],
+  ['active', STATUS_LABEL.active],
+  ['hold', STATUS_LABEL.hold],
+  ['done', STATUS_LABEL.done],
+  ['none', STATUS_LABEL.none],
+  ['recent', 'Recently revisited'],
+];
+
+/** Chats visible under the current search + view, in display order. */
+function visibleChats(): ListEntry[] {
+  if (!chats) return [];
+  const q = $('chat-search').value.trim().toLocaleLowerCase();
+  let list = q ? chats.filter((c) => c.title.toLocaleLowerCase().includes(q)) : chats;
+  if (chatView === 'recent') {
+    const order = new Map(revisited(visits).map(([k], i) => [k, i]));
+    list = list.filter((c) => order.has(chatKey(c.id))).sort((a, b) => order.get(chatKey(a.id))! - order.get(chatKey(b.id))!);
+  } else if (chatView !== 'all') {
+    list = list.filter((c) => (statusOf(s, chatKey(c.id)) ?? 'none') === chatView);
+  }
+  return list;
+}
+
+function setOverrides(ids: string[], v: string | null): void {
+  commit((x) => {
+    for (const id of ids) {
+      if (v === null) delete x.overrides[id];
+      else x.overrides[id] = v;
+    }
+  });
+}
+
+function setStatuses(ids: string[], status: Status | null): void {
+  const now = Date.now(); // one timestamp for the whole bulk change
+  commit((x) =>
+    setStatus(
+      x,
+      ids.map((id) => chatKey(id)),
+      status,
+      now,
+    ),
+  );
+}
+
+function renderBulkBar(shown: ListEntry[]): void {
+  const bar = $('bulk-bar');
+  if (!chats) return void bar.replaceChildren();
+  // Drop selections for chats no longer in the sidebar list.
+  const ids = new Set(chats.map((c) => c.id));
+  for (const id of selected) if (!ids.has(id)) selected.delete(id);
+  const n = selected.size;
+  const sel = [...selected];
+  const top = h(
+    'div',
+    { cls: 'bulk-top' },
+    btn('Select all visible', () => {
+      for (const c of shown) selected.add(c.id);
+      render();
+    }, { cls: 'btn ghost sm', key: 'bulk:all', disabled: shown.length === 0 }),
+    btn('Clear selection', () => {
+      selected.clear();
+      bulkEditor = false;
+      render();
+    }, { cls: 'btn ghost sm', key: 'bulk:clear', disabled: n === 0 }),
+    h('span', { cls: 'bulk-count', textContent: n ? `${n} selected` : 'None selected', role: 'status' }),
+  );
+  if (!n) return void bar.replaceChildren(top);
+  const statusBtns = h(
+    'div',
+    { cls: 'bulk-status', role: 'group', label: 'Set status of selected chats' },
+    ...(['active', 'hold', 'done', null] as const).map((st) =>
+      btn(STATUS_LABEL[st ?? 'none'], () => setStatuses(sel, st), {
+        cls: `btn sm st-${st ?? 'none'}`,
+        key: `bulk:st:${st ?? 'none'}`,
+        label: `Mark selected as ${STATUS_LABEL[st ?? 'none']}`,
+      }),
+    ),
+  );
+  const colorToggle = btn(bulkEditor ? 'Hide colors' : 'Color…', () => {
+    bulkEditor = !bulkEditor;
+    render();
+  }, { cls: 'btn sm', key: 'bulk:color', label: 'Color or category for selected chats' });
+  colorToggle.setAttribute('aria-expanded', String(bulkEditor));
+  const editor = bulkEditor
+    ? [
+        h(
+          'div',
+          { cls: 'chat-editor bulk-editor' },
+          ...colorEditor({
+            selected: null,
+            initial: PALETTE[1]!,
+            key: 'bulk',
+            pick: (v) => setOverrides(sel, v),
+            remove: () => setOverrides(sel, NONE),
+            resetLabel: 'Reset to automatic',
+          }),
+        ),
+      ]
+    : [];
+  bar.replaceChildren(top, h('div', { cls: 'bulk-actions' }, statusBtns, colorToggle), ...editor);
+}
+
+/** Every conversation loaded in the sidebar; colors / statuses for any of them, singly or in bulk. */
 function renderChats(): void {
   const list = $('chat-list');
   const note = $('chat-note');
+  $('chat-views').replaceChildren(
+    ...VIEWS.map(([v, label]) => {
+      const b = btn(label, () => {
+        chatView = v;
+        render();
+      }, { cls: 'view-chip', key: `view:${v}` });
+      b.setAttribute('aria-pressed', String(chatView === v));
+      return b;
+    }),
+  );
   if (!chats) {
     list.replaceChildren();
+    $('bulk-bar').replaceChildren();
     note.textContent = 'Open chatgpt.com in this tab to list the chats in its sidebar.';
     return;
   }
-  const q = $('chat-search').value.trim().toLocaleLowerCase();
-  const shown = q ? chats.filter((c) => c.title.toLocaleLowerCase().includes(q)) : chats;
-  note.textContent = q
-    ? `${shown.length} of ${chats.length} chats match.`
-    : `${chats.length} chats loaded in the sidebar. Scroll the sidebar to load older ones.`;
+  const shown = visibleChats();
+  renderBulkBar(shown);
+  const recentTotal = revisited(visits).length;
+  note.textContent =
+    chatView === 'recent'
+      ? !s.history.enabled
+        ? 'Recently revisited is off (Data tab).'
+        : `${shown.length} revisited chats in the sidebar${recentTotal > shown.length ? ` (${recentTotal - shown.length} more not loaded)` : ''}. Chats you opened at least twice; kept on this device only.`
+      : shown.length === chats.length
+        ? `${chats.length} chats loaded in the sidebar. Scroll the sidebar to load older ones.`
+        : `${shown.length} of ${chats.length} chats shown.`;
   list.replaceChildren(
     ...shown.map((c) => {
       // Recomputed from current settings so the list updates instantly after a change.
       const r = resolveColor(c.id, c.title, s, c.group?.key);
+      const st = statusOf(s, chatKey(c.id));
+      const v = visits[chatKey(c.id)];
       const meta =
-        r.source === 'manual'
-          ? r.color
-            ? 'Manual'
-            : 'No color'
-          : r.source === 'group'
-            ? (c.group?.name ?? 'Project')
-            : r.source === 'rule'
-              ? (r.category?.name ?? '')
-              : '';
+        chatView === 'recent' && v
+          ? `${v.count}× · ${ago(v.last)}`
+          : r.source === 'manual'
+            ? r.color
+              ? 'Manual'
+              : 'No color'
+            : r.source === 'group'
+              ? (c.group?.name ?? 'Project')
+              : r.source === 'rule'
+                ? (r.category?.name ?? '')
+                : '';
       const open = openChatId === c.id;
+      const check = h('input', {
+        type: 'checkbox',
+        cls: 'sel',
+        checked: selected.has(c.id),
+        label: `Select ${c.title || 'chat'}`,
+        key: `sel:${c.id}`,
+      });
+      check.onchange = () => {
+        if (check.checked) selected.add(c.id);
+        else selected.delete(c.id);
+        render();
+      };
       const row = h(
         'button',
         { type: 'button', cls: 'chat-row', key: `chat:${c.id}` },
         colorVar(h('i', { cls: r.color ? 'dot' : 'dot none' }), r.color),
         h('span', { cls: 'chat-title', textContent: c.title || 'Untitled' }),
         ...(c.active ? [h('span', { cls: 'tag', textContent: 'Open' })] : []),
+        ...(st ? [h('span', { cls: `wstatus st-${st}`, textContent: STATUS_LABEL[st] })] : []),
         h('span', { cls: 'chat-meta', textContent: meta }),
       );
       row.setAttribute('aria-expanded', String(open));
@@ -400,17 +578,18 @@ function renderChats(): void {
         openChatId = open ? null : c.id;
         render();
       };
-      const li = h('li', { cls: open ? 'chat open' : 'chat' }, row);
+      const li = h('li', { cls: `chat${open ? ' open' : ''}${selected.has(c.id) ? ' selected' : ''}` }, h('div', { cls: 'chat-line' }, check, row));
       if (open) {
         li.append(
           h(
             'div',
             { cls: 'chat-editor' },
+            statusSwitch(st, (next) => setStatuses([c.id], next), `chat:${c.id}`),
             ...colorEditor({
               selected: r.source === 'manual' ? r.color : null,
               initial: r.color ?? PALETTE[1]!,
               key: `chat:${c.id}`,
-              pick: (v) => setOverride(c.id, v),
+              pick: (v2) => setOverride(c.id, v2),
               remove: () => setOverride(c.id, NONE),
               resetLabel: 'Reset to automatic',
             }),
@@ -419,6 +598,30 @@ function renderChats(): void {
       }
       return li;
     }),
+  );
+}
+
+/** Unassigned / Active / On hold / Completed segmented control (single chat). */
+function statusSwitch(current: Status | null, set: (s: Status | null) => void, key: string): HTMLElement {
+  return h(
+    'div',
+    {},
+    h('p', { cls: 'eyebrow', textContent: 'Working set' }),
+    h(
+      'div',
+      { cls: 'segmented four', role: 'radiogroup', label: 'Working set status' },
+      ...([null, 'active', 'hold', 'done'] as const).map((st) => {
+        const input = h('input', {
+          type: 'radio',
+          name: `${key}:status`,
+          value: st ?? 'none',
+          checked: current === st,
+          key: `${key}:st:${st ?? 'none'}`,
+        });
+        input.onchange = () => set(st);
+        return h('label', {}, input, h('span', { textContent: STATUS_LABEL[st ?? 'none'] }));
+      }),
+    ),
   );
 }
 
@@ -452,6 +655,31 @@ function renderOutline(): void {
   hex.placeholder = 'Auto';
   $('outline-picker').value = sel === AUTO ? '#71717a' : sel;
   $('outline-card').classList.toggle('outline-off', !a.highlight);
+}
+
+// ------------------------------------------------------------------ Presenter mode + history
+
+function renderPresenter(): void {
+  const p = s.presenter;
+  const t = $<HTMLButtonElement>('presenter-toggle');
+  t.setAttribute('aria-pressed', String(p.enabled));
+  t.title = p.enabled ? 'Presenter mode is on: chat titles hidden (click to show)' : 'Presenter mode: hide chat titles';
+  $('presenter').checked = p.enabled;
+  for (const r of document.querySelectorAll<HTMLInputElement>('input[name="conceal"]')) r.checked = r.value === p.style;
+  $('strength').value = String(p.strength);
+  $('strength-v').textContent = `${p.strength}px`;
+  $('reveal').checked = p.reveal;
+  $<HTMLSelectElement>('shortcut').value = p.shortcut;
+  // The popup's own chat titles are concealed too (someone may share the whole screen).
+  document.body.classList.toggle('presenter', p.enabled);
+  document.body.classList.toggle('presenter-reveal', p.reveal);
+}
+
+function renderHistory(): void {
+  $('history').checked = s.history.enabled;
+  const n = Object.keys(visits).length;
+  $('history-count').textContent = n ? `${n} chats in history (${revisited(visits).length} revisited)` : 'No history yet.';
+  $<HTMLButtonElement>('history-clear').disabled = n === 0;
 }
 
 // ------------------------------------------------------------------ Rules tab
@@ -660,6 +888,8 @@ function render(): void {
   renderStatus();
   renderCurrent();
   renderChats();
+  renderPresenter();
+  renderHistory();
   renderOutline();
   renderGroups();
   renderCategories();
@@ -710,6 +940,23 @@ function wire(): void {
   $('enabled').onchange = () => commit((x) => (x.enabled = $('enabled').checked));
   $('highlight').onchange = () => commit((x) => (x.appearance.highlight = $('highlight').checked));
   $('chat-search').oninput = renderChats;
+  // Presenter mode
+  $('presenter-toggle').onclick = () => commit((x) => (x.presenter.enabled = !x.presenter.enabled));
+  $('presenter').onchange = () => commit((x) => (x.presenter.enabled = $('presenter').checked));
+  for (const r of document.querySelectorAll<HTMLInputElement>('input[name="conceal"]')) {
+    r.onchange = () => commit((x) => (x.presenter.style = r.value as Conceal));
+  }
+  $('strength').oninput = () => commit((x) => (x.presenter.strength = Number($('strength').value)));
+  $('reveal').onchange = () => commit((x) => (x.presenter.reveal = $('reveal').checked));
+  $('shortcut').onchange = () => commit((x) => (x.presenter.shortcut = $<HTMLSelectElement>('shortcut').value as Shortcut));
+  // Recently revisited
+  $('history').onchange = () => commit((x) => (x.history.enabled = $('history').checked));
+  $('history-clear').onclick = async () => {
+    if (!confirm('Clear the Recently revisited history on this device?')) return;
+    await clearVisits();
+    visits = {};
+    render();
+  };
   const applyOutlineHex = () => {
     const hex = $('outline-hex');
     const v = hex.value.trim() === '' ? AUTO : normalizeHex(hex.value);
@@ -798,14 +1045,20 @@ function wire(): void {
 }
 
 async function init(): Promise<void> {
-  [s, current, diag, chats] = await Promise.all([
+  [s, current, diag, chats, visits] = await Promise.all([
     load(),
     ask<Current>(MSG_CURRENT),
     ask<Diag>(MSG_DIAG),
     ask<ListEntry[]>(MSG_LIST),
+    loadVisits(),
   ]);
   wire();
   render();
+  chrome.storage.onChanged.addListener(async (changes, area) => {
+    if (area !== 'local' || !(VISITS_KEY in changes)) return;
+    visits = await loadVisits();
+    render();
+  });
   onChange(async (next) => {
     // Refresh what the page reports (colors in use, titles) after any change, ours or another tab's.
     [current, chats] = await Promise.all([ask<Current>(MSG_CURRENT), ask<ListEntry[]>(MSG_LIST)]).then(
