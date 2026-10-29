@@ -164,9 +164,8 @@ describe('v3: Working Set, Presenter, history, provider keys', () => {
 
   it('chat keys are provider-namespaced; parseChatKey validates provider and id', () => {
     expect(chatKey(ID)).toBe(`chatgpt:${ID}`);
-    expect(chatKey(ID, 'claude')).toBe(`claude:${ID}`);
     expect(parseChatKey(`chatgpt:${ID.toUpperCase()}`)).toEqual({ provider: 'chatgpt', id: ID });
-    for (const bad of [ID, `bard:${ID}`, 'chatgpt:short', `:${ID}`, 42]) expect(parseChatKey(bad)).toBeNull();
+    for (const bad of [ID, `claude:${ID}`, 'chatgpt:short', `:${ID}`, 42]) expect(parseChatKey(bad)).toBeNull();
   });
 
   it('statuses carry updatedAt; Unassigned is a timestamped null (sync-friendly); junk dropped', () => {
@@ -180,14 +179,12 @@ describe('v3: Working Set, Presenter, history, provider keys', () => {
     const m = migrate({
       chats: {
         [`chatgpt:${ID}`]: { status: 'hold', updatedAt: 5 },
-        [`claude:${ID}`]: { status: 'done', updatedAt: 6 }, // future adapter data is preserved
         [`chatgpt:${ID.replace('1', '2')}`]: { status: 'weird', updatedAt: -1 },
         nonsense: { status: 'active', updatedAt: 1 },
       },
     });
     expect(m.chats).toEqual({
       [`chatgpt:${ID}`]: { status: 'hold', updatedAt: 5 },
-      [`claude:${ID}`]: { status: 'done', updatedAt: 6 },
       [`chatgpt:${ID.replace('1', '2')}`]: { status: null, updatedAt: 0 },
     });
   });

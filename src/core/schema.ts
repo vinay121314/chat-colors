@@ -5,10 +5,10 @@
 export const SCHEMA_VERSION = 3;
 
 // ---- Provider-namespaced conversation keys -------------------------------------------------
-// New per-conversation records are keyed `<provider>:<id>` so future adapters (ChatGPT, Claude)
-// can share one store and a future sync can merge them without collisions. Only the ChatGPT
-// adapter exists today. (Older `overrides` keys are bare ChatGPT ids; see docs/ARCHITECTURE.md.)
-export const PROVIDERS = ['chatgpt', 'claude'] as const;
+// New per-conversation records are keyed `<provider>:<id>` (always `chatgpt:` — the extension is
+// ChatGPT-only). The prefix is part of the stored format, so it stays.
+// (Older `overrides` keys are bare ChatGPT ids; see docs/ARCHITECTURE.md.)
+export const PROVIDERS = ['chatgpt'] as const;
 export type Provider = (typeof PROVIDERS)[number];
 export const PROVIDER: Provider = 'chatgpt';
 

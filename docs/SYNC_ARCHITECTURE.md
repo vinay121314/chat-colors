@@ -180,7 +180,7 @@ Out of scope: hiding from Google that the extension exists, and traffic analysis
 | `background.service_worker` | A (recommended, for reliable merges) and B | None (it's not a permission) |
 | `alarms` | Periodic sync in A and B | None |
 | No host permission (CORS allowlist of our extension ID) **or** `optional_host_permissions: ["https://<your-sync-domain>/*"]` | B | No install warning; a runtime prompt if the optional permission is used |
-| `https://claude.ai/*` content script | Roadmap Phase 2 (not sync) | "Read and change your data on claude.ai" |
+| ~~`https://claude.ai/*` content script~~ | Dropped: ChatGPT-only | n/a |
 
 ## 9. Oracle verification checklist (you run these; I haven't accessed the account)
 
