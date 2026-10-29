@@ -1,11 +1,43 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
-  <!-- Chat Colors: two overlapping speech bubbles; the overlap is their mixed color. Original artwork. -->
+  <!-- Chat Colors: iridescent glass orb (sapphire, violet, magenta, warm gold). Original artwork. -->
   <defs>
-    <path id="back" d="M28 12h48a20 20 0 0 1 20 20v28a20 20 0 0 1-20 20H40L18 98l4-20A20 20 0 0 1 8 60V32a20 20 0 0 1 20-20Z" />
-    <path id="front" d="M52 40h48a20 20 0 0 1 20 20v28a20 20 0 0 1-14 19l4 21-22-20H52a20 20 0 0 1-20-20V60a20 20 0 0 1 20-20Z" />
-    <clipPath id="clip-front"><use href="#front" /></clipPath>
+    <!-- base hue sweep, top-left to bottom-right -->
+    <linearGradient id="hue" x1="0.12" y1="0.08" x2="0.9" y2="0.95">
+      <stop offset="0" stop-color="#1d4ed8" />
+      <stop offset="0.38" stop-color="#6d28d9" />
+      <stop offset="0.72" stop-color="#c026d3" />
+      <stop offset="1" stop-color="#e11d74" />
+    </linearGradient>
+    <!-- warm gold glow, lower right -->
+    <radialGradient id="gold" cx="0.82" cy="0.86" r="0.5">
+      <stop offset="0" stop-color="#fbbf24" stop-opacity="0.75" />
+      <stop offset="0.5" stop-color="#f59e0b" stop-opacity="0.18" />
+      <stop offset="1" stop-color="#f59e0b" stop-opacity="0" />
+    </radialGradient>
+    <!-- cool sapphire sheen, upper left -->
+    <radialGradient id="sheen" cx="0.3" cy="0.28" r="0.55">
+      <stop offset="0" stop-color="#3b82f6" stop-opacity="0.45" />
+      <stop offset="1" stop-color="#60a5fa" stop-opacity="0" />
+    </radialGradient>
+    <!-- depth: darker toward the rim -->
+    <radialGradient id="depth" cx="0.45" cy="0.4" r="0.62">
+      <stop offset="0.6" stop-color="#0b0730" stop-opacity="0" />
+      <stop offset="1" stop-color="#0b0730" stop-opacity="0.42" />
+    </radialGradient>
+    <!-- glass highlight -->
+    <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.42" />
+      <stop offset="1" stop-color="#fff" stop-opacity="0" />
+    </linearGradient>
+    <clipPath id="orb"><circle cx="64" cy="64" r="60" /></clipPath>
   </defs>
-  <use href="#back" fill="#3b82f6" />
-  <use href="#front" fill="#f43f5e" />
-  <use href="#back" fill="#8b5cf6" clip-path="url(#clip-front)" />
+  <g clip-path="url(#orb)">
+    <rect width="128" height="128" fill="url(#hue)" />
+    <rect width="128" height="128" fill="url(#sheen)" />
+    <rect width="128" height="128" fill="url(#gold)" />
+    <rect width="128" height="128" fill="url(#depth)" />
+    <ellipse cx="54" cy="34" rx="38" ry="24" fill="url(#gloss)" transform="rotate(-24 54 34)" />
+    <circle cx="40" cy="30" r="4" fill="#fff" fill-opacity="0.4" />
+  </g>
+  <circle cx="64" cy="64" r="59.25" fill="none" stroke="#fff" stroke-opacity="0.28" stroke-width="1.5" />
 </svg>
