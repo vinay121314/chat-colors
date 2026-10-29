@@ -384,7 +384,47 @@ export function diagnose(doc: Document = document) {
   const box = sample ? rowBox(sample) : null;
   const cs = box ? getComputedStyle(box) : null;
   const bar = box?.querySelector(`:scope > .${BAR_CLASS}`);
+
+  // Regular vs Project vs custom GPT handling (counts only; keys never reported).
+  const kinds = { chats: 0, projectChats: 0, gptChats: 0, projectEntries: 0, gptEntries: 0 };
+  for (const r of rows) {
+    const g = parseChatGroup(r.el.getAttribute('href'));
+    kinds[!g ? 'chats' : g.key.startsWith('g-p-') ? 'projectChats' : 'gptChats']++;
+  }
+  for (const r of root ? findGroupRows(root) : []) kinds[r.group.key.startsWith('g-p-') ? 'projectEntries' : 'gptEntries']++;
+  // /g/ links we did NOT recognise: masked shapes tell us if the Project/GPT URL format differs.
+  const unrecognized = new Map<string, number>();
+  for (const a of root?.querySelectorAll('a[href*="/g/"]') ?? []) {
+    const h = a.getAttribute('href') ?? '';
+    if (parseConversationId(h) || parseGroupLink(h)) continue;
+    const k = maskPath(h);
+    unrecognized.set(k, (unrecognized.get(k) ?? 0) + 1);
+  }
+  // How ChatGPT marks the open chat natively (attribute names/values like aria-current="page"; no text).
+  const openId = parseConversationId(location.pathname);
+  const openRow = openId ? rows.find((r) => r.id === openId) : undefined;
+  const stateAttrs = (el: Element | null | undefined) =>
+    el
+      ? [...el.attributes]
+          .filter((a) => /^(aria-current|aria-selected|aria-pressed)$|active|selected|current|state/i.test(a.name) && !a.name.startsWith('data-crc'))
+          .map((a) => `${a.name}="${a.value.slice(0, 20)}"`)
+      : [];
+  const otherRow = rows.find((r) => r.id !== openId);
+  const bgOf = (el: Element | undefined) => (el ? getComputedStyle(rowBox(el)).backgroundColor : null);
+
   return {
+    navigationApi: 'navigation' in window,
+    kinds,
+    unrecognizedGroupLinks: Object.fromEntries([...unrecognized].slice(0, 12)),
+    openChat: openId
+      ? {
+          inSidebar: !!openRow,
+          linkStateAttrs: stateAttrs(openRow?.el),
+          rowStateAttrs: openRow ? stateAttrs(rowBox(openRow.el)) : [],
+          rowBackground: bgOf(openRow?.el),
+          otherRowBackground: bgOf(otherRow?.el),
+        }
+      : null,
     path: maskPath(location.pathname),
     knownContainers: Object.fromEntries(ROOT_SELECTORS.map((s) => [s, !!doc.querySelector(s)])),
     root: root ? describe(root) : null,

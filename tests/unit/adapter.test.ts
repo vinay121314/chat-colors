@@ -189,6 +189,10 @@ describe('decorate', () => {
     for (const id of Object.values(ID)) expect(text).not.toContain(id);
     expect(text).not.toContain('side-project'); // project slug masked
     expect(d.sampleRow?.join('\n')).toMatch(/#text\(\d+\)/);
+    // Regular / Project / GPT handling is reported as counts only.
+    expect(d.kinds).toEqual({ chats: 4, projectChats: 1, gptChats: 1, projectEntries: 1, gptEntries: 0 });
+    expect(d.unrecognizedGroupLinks).toEqual({});
+    expect(text).not.toContain('0123456789abcdef'); // project key masked
   });
 
   it('maskPath hides ids and slugs', () => {
