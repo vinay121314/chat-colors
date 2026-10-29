@@ -1,5 +1,32 @@
 # QA report — v1.0.0
 
+## Live verification on chatgpt.com (2026-10-29, user's logged-in account)
+
+The user ran these checks by hand on their own logged-in ChatGPT account in Chrome, using the Phase 1 build. **No diagnostics report was provided**, so this section records no detected-chat counts or DOM details.
+
+| # | Check | Live result |
+|---|---|---|
+| 1 | Regular chat coloring | ✅ Passed |
+| 2 | Project chat coloring | ✅ Passed |
+| 3 | Custom GPT chat coloring | ⏭️ Not tested |
+| 4 | Keyword rules | ⏭️ Not tested |
+| 5 | Bulk actions | ⏭️ Not tested |
+| 6 | Working Set filters | ⏭️ Not tested |
+| 7 | Recently Revisited | ⏭️ Not tested |
+| 8 | Presenter Mode | ⏭️ Not tested |
+| 9 | Active-chat outline | ✅ Passed |
+| 10 | Native three-dot menus (not obstructed) | ✅ Passed |
+| 11 | Settings persistence | ✅ Passed |
+
+**Totals:** 5 passed, 0 failed, 6 not tested. A "not tested" check is neither a pass nor a failure. Those features are covered **only** by the automated fixture tests below. They are not live-verified.
+
+**How the evidence breaks down:**
+- **Automated fixture tests:** every feature above, against synthetic fixture pages in Chromium (see the Phase 1 section and [TESTING.md](TESTING.md)). Fixtures are not proof of live compatibility.
+- **Live tests passed:** checks 1, 2, 9, 10, 11.
+- **Live tests not performed:** checks 3–8.
+
+---
+
 ## Phase 1 (2026-10-29): bulk assignment, Working Set, Recently Revisited, Presenter Mode
 
 Baseline checked first: HEAD was `915736e`, the tree was clean, and none of the Phase 1 features existed. Before any change, 125 unit and 28 e2e tests passed.
