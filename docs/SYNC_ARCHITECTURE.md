@@ -1,5 +1,7 @@
 # Sync architecture: feasibility and security design (DRAFT, for approval)
 
+> **Scope update (2026-10-29): Chat Colors is ChatGPT-only.** References to Claude / claude.ai below are historical and are not on the roadmap. No Claude adapter or `claude.ai` permission is planned.
+
 Status: **design only.** Nothing here is implemented or deployed. The Oracle account hasn't been accessed and no Telegram bot exists. Facts marked **VERIFY** must be confirmed before any deployment.
 
 ## 1. Goals and constraints
