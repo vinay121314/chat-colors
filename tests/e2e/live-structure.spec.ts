@@ -27,8 +27,10 @@ test('decorates the listitem wrapper (not the link), only in the sidebar, no dup
   await expect(p.locator(`${ROOT} a[data-crc]`)).toHaveCount(0);
   await expect(p.locator('main [data-crc]')).toHaveCount(0);
   for (const id of Object.values(ID)) {
-    await expect(item(p, id).locator(':scope > .crc-btn')).toHaveCount(1);
     await expect(item(p, id).locator(':scope > .crc-bar')).toHaveCount(1); // seeded: rules + neutral fallback
+    // Nothing interactive of ours in the row: only ChatGPT's own link and menu button remain.
+    await expect(item(p, id).locator('button, [role="button"], [tabindex]')).toHaveCount(1);
+    await expect(item(p, id).locator('.crc-btn, .crc-open')).toHaveCount(0);
   }
 });
 
@@ -47,28 +49,37 @@ test('no layout shift: listitem and link boxes are identical with decoration on 
   expect(await boxes()).toEqual(on);
 });
 
-test('native three-dot menu still works, and our dot does not overlap it', async ({ context }) => {
+test('native three-dot menu: nothing of ours overlaps or intercepts it, in every style mode', async ({ context, extId }) => {
   const p = await openChat(context);
-  const row = item(p, ID.ts);
-  await row.hover();
-  const menu = row.locator('button.menu');
-  const dot = row.locator(':scope > .crc-btn');
-  const [m, d] = [(await menu.boundingBox())!, (await dot.boundingBox())!];
-  expect(d.x + d.width).toBeLessThanOrEqual(m.x); // dot sits to the left of the native menu
-  await menu.click();
-  expect(await p.evaluate(() => (window as unknown as { __menu: number }).__menu)).toBe(1);
+  const popup = await context.newPage();
+  await popup.goto(`chrome-extension://${extId}/popup.html`);
+  for (const mode of ['bar', 'both', 'fill'] as const) {
+    await popup.evaluate(async (m) => {
+      const s = (await chrome.storage.local.get('crc:settings'))['crc:settings'] as { appearance: Record<string, unknown> };
+      await chrome.storage.local.set({ 'crc:settings': { ...s, appearance: { ...s.appearance, mode: m } } });
+    }, mode);
+    await p.bringToFront();
+    const row = item(p, ID.ts);
+    await row.hover();
+    // The element on top at the menu's center must be the menu itself.
+    const topAtMenu = await row.locator('button.menu').evaluate((m) => {
+      const r = m.getBoundingClientRect();
+      return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) === m;
+    });
+    expect(topAtMenu, `mode=${mode}`).toBe(true);
+    // Our elements never take pointer events.
+    const ours = await row.evaluate((r) => [...r.querySelectorAll('.crc-bar, .crc-fill')].map((e) => getComputedStyle(e).pointerEvents));
+    expect(ours.every((v) => v === 'none'), `mode=${mode}`).toBe(true);
+  }
+  const before = await p.evaluate(() => (window as unknown as { __menu: number }).__menu);
+  await item(p, ID.ts).locator('button.menu').click();
+  expect(await p.evaluate(() => (window as unknown as { __menu: number }).__menu)).toBe(before + 1);
   expect(await p.evaluate(() => (window as unknown as { __navigations: number }).__navigations)).toBe(0);
 });
 
-test('our picker opens without navigating; the row link still navigates normally', async ({ context }) => {
+test('the row link still navigates normally with decoration', async ({ context }) => {
   const p = await openChat(context);
-  const row = item(p, ID.plain);
-  await row.hover();
-  await row.locator(':scope > .crc-btn').click();
-  await expect(p.locator('#crc-picker-host [popover]')).toBeVisible();
-  expect(await p.evaluate(() => (window as unknown as { __navigations: number }).__navigations)).toBe(0);
-  await p.keyboard.press('Escape');
-  await row.locator('a').click();
+  await item(p, ID.plain).locator('a').click();
   expect(await p.evaluate(() => (window as unknown as { __navigations: number }).__navigations)).toBe(1);
   expect(p.url()).toContain(ID.plain);
 });
@@ -123,7 +134,58 @@ test('highlight shows on an uncolored chat too, and can be switched off independ
 
   await popup.bringToFront();
   await popup.getByRole('tab', { name: 'Style' }).click();
-  await popup.getByRole('switch', { name: 'Highlight the open chat' }).uncheck();
+  await popup.getByRole('switch', { name: 'Outline the open chat' }).uncheck();
   await p.bringToFront();
   await expect.poll(() => outlined(p)).toEqual([]);
+});
+
+test('outline is customizable: preset color, HEX, width, opacity, Auto, and off; bar color kept', async ({ context, extId }) => {
+  const p = await openChat(context, `/c/${ID.meeting}`);
+  const outline = () =>
+    item(p, ID.meeting).evaluate((e) => {
+      const cs = getComputedStyle(e);
+      return { style: cs.outlineStyle, width: cs.outlineWidth, color: cs.outlineColor };
+    });
+  expect(await outline()).toMatchObject({ style: 'solid', width: '2px' });
+
+  const popup = await context.newPage();
+  await popup.goto(`chrome-extension://${extId}/popup.html`);
+  await popup.getByRole('tab', { name: 'Style' }).click();
+  await popup.getByRole('button', { name: 'Outline #e03131' }).click();
+  await popup.locator('#outlineWidth').fill('4');
+  await popup.locator('#outlineOpacity').fill('100');
+  await p.bringToFront();
+  await expect.poll(outline).toMatchObject({ style: 'solid', width: '4px' });
+  expect((await outline()).color).toMatch(/224, 49, 49|0\.878.*0\.192.*0\.192/); // #e03131 at 100%
+  await expect(item(p, ID.meeting).locator(':scope > .crc-bar')).toHaveCount(1); // assigned color preserved
+
+  await popup.bringToFront();
+  await popup.locator('#outline-hex').fill('#00ff00');
+  await popup.locator('#outline-apply').click();
+  await p.bringToFront();
+  await expect.poll(async () => (await outline()).color).toMatch(/0, 255, 0|0 1 0/);
+
+  await popup.bringToFront();
+  await popup.getByRole('button', { name: 'Auto outline color (text color)' }).click();
+  await popup.screenshot({ path: `${SHOTS}/popup-style-outline.png` });
+  await popup.getByRole('switch', { name: 'Outline the open chat' }).uncheck();
+  await p.bringToFront();
+  await expect.poll(async () => (await outline()).style).toBe('none');
+});
+
+test('invalid outline HEX is rejected; empty means Auto', async ({ context, extId }) => {
+  const popup = await context.newPage();
+  await popup.goto(`chrome-extension://${extId}/popup.html`);
+  await popup.getByRole('tab', { name: 'Style' }).click();
+  await popup.locator('#outline-hex').fill('nope');
+  await popup.locator('#outline-apply').click();
+  const saved = () =>
+    popup.evaluate(async () => ((await chrome.storage.local.get('crc:settings'))['crc:settings'] as { appearance: { outlineColor: string } }).appearance.outlineColor);
+  expect(await saved()).toBe('auto');
+  await popup.locator('#outline-hex').fill('#123');
+  await popup.locator('#outline-apply').click();
+  await expect.poll(saved).toBe('#112233');
+  await popup.locator('#outline-hex').fill('');
+  await popup.locator('#outline-apply').click();
+  await expect.poll(saved).toBe('auto');
 });

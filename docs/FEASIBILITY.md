@@ -1,5 +1,7 @@
 # Feasibility — ChatGPT Recents Colorizer
 
+> **Historical (Phase 1, 2026-10-28).** This is kept as the original analysis. Several assumptions here have since been superseded: the selectors were verified on a logged-in session, the inset-shadow border was replaced by an overlay bar, and the in-row control was removed. For the current design see [ARCHITECTURE.md](ARCHITECTURE.md); for live verification status see [QA.md](QA.md).
+
 Status: **Phase 1 draft, 2026-10-28.** No live ChatGPT DOM has been inspected yet.
 Every selector below is marked **UNVERIFIED** until it has been checked against the live site in a real browser session.
 

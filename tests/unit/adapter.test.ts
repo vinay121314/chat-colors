@@ -83,19 +83,21 @@ describe('verified live structure (logged-in diagnostics)', () => {
       expect(rowBox(r.el).getAttribute('role')).toBe('listitem');
       expect(rowBox(r.el).hasAttribute('data-sidebar-cycle-item')).toBe(true);
     }
-    const box = decorate(rows[0]!, '#ff0000', 'x', vi.fn());
+    const box = decorate(rows[0]!, '#ff0000');
     expect(box.getAttribute('role')).toBe('listitem');
     expect(rows[0]!.el.hasAttribute(ID_ATTR)).toBe(false);
     expect(main.querySelector('[data-crc]')).toBeNull();
   });
 
-  it('keeps the native menu button and adds exactly one control next to it', () => {
+  it('keeps the native menu button and adds nothing interactive to the row', () => {
     mountLivePage();
     const r = findRows(findRoot()!)[0]!;
-    for (let i = 0; i < 3; i++) decorate(r, '#ff0000', 'x', vi.fn());
     const box = rowBox(r.el);
-    expect(box.querySelectorAll('.crc-btn')).toHaveLength(1);
+    const before = box.querySelectorAll('button, a, input, [tabindex], [role="button"]').length;
+    for (let i = 0; i < 3; i++) decorate(r, '#ff0000');
+    expect(box.querySelectorAll('button, a, input, [tabindex], [role="button"]')).toHaveLength(before);
     expect(box.querySelector('button[aria-label="Open conversation options"]')).not.toBeNull();
+    expect(box.querySelectorAll('.crc-bar')).toHaveLength(1);
   });
 
   it('activeRow prefers aria-current="page" over the URL, never yields two, falls back to the URL', () => {
@@ -182,58 +184,43 @@ describe('discovery', () => {
 });
 
 describe('decorate', () => {
-  it('is idempotent: one control, attributes set once', () => {
+  it('is idempotent: one bar and one fill, attributes set once, purely visual', () => {
     const a = row(`/c/${ID.ts}`, 'Title');
     document.body.append(a);
-    const open = vi.fn();
-    for (let i = 0; i < 3; i++) decorate({ el: a, id: ID.ts }, '#ff0000', 'Title', open);
-    expect(a.querySelectorAll('.crc-btn')).toHaveLength(1);
+    for (let i = 0; i < 3; i++) decorate({ el: a, id: ID.ts }, '#ff0000');
     expect(a.querySelectorAll('.crc-bar')).toHaveLength(1);
+    expect(a.querySelectorAll('.crc-fill')).toHaveLength(1);
+    expect(a.querySelectorAll('button')).toHaveLength(0);
+    for (const el of a.querySelectorAll('.crc-bar, .crc-fill')) expect(el.getAttribute('aria-hidden')).toBe('true');
     expect(a.getAttribute(ID_ATTR)).toBe(ID.ts);
     expect(a.hasAttribute(COLOR_ATTR)).toBe(true);
     expect(a.style.getPropertyValue('--crc-c')).toBe('#ff0000');
-    expect(getTitle(a)).toBe('Title'); // control adds no text
+    expect(getTitle(a)).toBe('Title'); // decoration adds no text
   });
 
   it('removes color when resolved to null', () => {
     const a = row(`/c/${ID.ts}`, 'Title');
-    decorate({ el: a, id: ID.ts }, '#ff0000', 'Title', null);
-    decorate({ el: a, id: ID.ts }, null, 'Title', null);
+    decorate({ el: a, id: ID.ts }, '#ff0000');
+    decorate({ el: a, id: ID.ts }, null);
     expect(a.hasAttribute(COLOR_ATTR)).toBe(false);
     expect(a.style.getPropertyValue('--crc-c')).toBe('');
-    expect(a.querySelector('.crc-bar')).toBeNull();
+    expect(a.querySelector('.crc-bar, .crc-fill')).toBeNull();
   });
 
-  it('control is keyboard-focusable and labelled', () => {
-    const a = row(`/c/${ID.ts}`, 'Client call');
-    document.body.append(a);
-    decorate({ el: a, id: ID.ts }, '#ff0000', 'Client call', vi.fn());
-    const btn = a.querySelector<HTMLButtonElement>('.crc-btn')!;
-    expect(btn.tagName).toBe('BUTTON');
-    expect(btn.type).toBe('button');
-    expect(btn.getAttribute('aria-label')).toBe('Set color for Client call');
-    btn.focus();
-    expect(document.activeElement).toBe(btn);
-  });
-
-  it('control click opens the picker without navigating or reaching page handlers', () => {
+  it('clicks on a decorated row still reach the link and ChatGPT handlers (nothing intercepts)', () => {
     const a = row(`/c/${ID.ts}`, 'Title');
     document.body.append(a);
     const pageHandler = vi.fn();
     document.addEventListener('click', pageHandler); // ChatGPT/React delegates at the root
-    const open = vi.fn();
-    decorate({ el: a, id: ID.ts }, '#ff0000', 'Title', open);
-    const ev = new MouseEvent('click', { bubbles: true, cancelable: true });
-    a.querySelector('.crc-btn')!.dispatchEvent(ev);
-    expect(open).toHaveBeenCalledOnce();
-    expect(ev.defaultPrevented).toBe(true);
-    expect(pageHandler).not.toHaveBeenCalled();
+    decorate({ el: a, id: ID.ts }, '#ff0000');
+    a.querySelector('.truncate')!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    expect(pageHandler).toHaveBeenCalledOnce();
     document.removeEventListener('click', pageHandler);
   });
 
   it('diagnostics expose structure but never titles or raw ids', () => {
     mountPage();
-    decorate({ el: document.querySelector<HTMLAnchorElement>(`a[href="/c/${ID.ts}"]`)!, id: ID.ts }, '#ff0000', 'x', vi.fn());
+    decorate({ el: document.querySelector<HTMLAnchorElement>(`a[href="/c/${ID.ts}"]`)!, id: ID.ts }, '#ff0000');
     const d = diagnose();
     const text = JSON.stringify(d);
     expect(d.rows).toBe(6);
@@ -264,7 +251,7 @@ describe('decorate', () => {
     ul.append(li, document.createElement('li'));
     document.body.append(ul);
     expect(rowBox(a)).toBe(li); // climbs to the single-conversation container, stops at the list
-    const box = decorate({ el: a, id: ID.ts }, '#ff0000', 'Title only', vi.fn());
+    const box = decorate({ el: a, id: ID.ts }, '#ff0000');
     expect(box).toBe(li);
     expect(li.getAttribute(ID_ATTR)).toBe(ID.ts);
     expect(li.querySelector(':scope > .crc-bar')).not.toBeNull();
@@ -282,9 +269,9 @@ describe('decorate', () => {
     const a = row(`/c/${ID.ts}`, 'Title');
     document.body.append(a);
     const before = a.outerHTML;
-    decorate({ el: a, id: ID.ts }, '#ff0000', 'Title', vi.fn());
+    decorate({ el: a, id: ID.ts }, '#ff0000');
     undecorate(a);
-    expect(a.querySelector('.crc-btn')).toBeNull();
+    expect(a.querySelector('.crc-bar, .crc-fill')).toBeNull();
     expect(a.hasAttribute(ID_ATTR) || a.hasAttribute(COLOR_ATTR)).toBe(false);
     expect(a.outerHTML.replace(/ (style|class)="[^"]*"/g, '')).toBe(before.replace(/ (style|class)="[^"]*"/g, ''));
   });

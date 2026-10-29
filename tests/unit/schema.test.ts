@@ -107,12 +107,29 @@ describe('migrate', () => {
   it('clamps appearance values', () => {
     const d = defaultSettings().appearance;
     const s = migrate({ appearance: { thickness: 99, opacity: -5, radius: 'x', mode: 'neon', fill: 90 } });
-    expect(s.appearance).toEqual({ mode: d.mode, thickness: 6, opacity: 10, radius: d.radius, fill: 40, highlight: true, openTabs: true });
+    expect(s.appearance).toEqual({
+      mode: d.mode,
+      thickness: 6,
+      opacity: 10,
+      radius: d.radius,
+      fill: 40,
+      highlight: true,
+      outlineColor: 'auto',
+      outlineWidth: 2,
+      outlineOpacity: 65,
+    });
+    // Outline: HEX normalized, 'auto' kept, junk -> default; width/opacity clamped.
+    const o = migrate({ appearance: { outlineColor: '#ABC', outlineWidth: 9, outlineOpacity: 1 } }).appearance;
+    expect([o.outlineColor, o.outlineWidth, o.outlineOpacity]).toEqual(['#aabbcc', 4, 20]);
+    expect(migrate({ appearance: { outlineColor: 'red' } }).appearance.outlineColor).toBe('auto');
+    // Removed setting from an older build is dropped, not carried along.
+    expect(migrate({ appearance: { openTabs: true } }).appearance).not.toHaveProperty('openTabs');
     expect(migrate({ appearance: { highlight: false } }).appearance.highlight).toBe(false);
     expect(migrate({ appearance: { highlight: 'yes' } }).appearance.highlight).toBe(true); // invalid -> default
     expect(migrate({ appearance: { mode: 'fill' } }).appearance.mode).toBe('fill');
     // Settings saved before fill existed get the new defaults (bar + fill).
-    expect(migrate({ version: 1, appearance: { thickness: 3, opacity: 80, radius: 2 } }).appearance).toMatchObject({ mode: 'both', fill: 16, thickness: 3 });
+    expect(migrate({ version: 1, appearance: { thickness: 3, opacity: 80, radius: 2 } }).appearance).toMatchObject({ mode: 'bar', fill: 16, thickness: 3 }); // bar by default; an explicit saved mode is kept
+    expect(migrate({ appearance: { mode: 'both' } }).appearance.mode).toBe('both');
   });
 
   it('is idempotent', () => {

@@ -9,40 +9,40 @@ ChatGPT Recents Colorizer has **no backend, no telemetry, no analytics and makes
 | `storage` | Save your colors and rules in `chrome.storage.local` on this device. |
 | Content script on `https://chatgpt.com/*` | Draw colored borders in the ChatGPT sidebar. This is the only site the extension runs on. |
 
-It does **not** request `tabs`, `activeTab`, `scripting`, `cookies`, `history`, `webRequest`, or any other host access.
-
-### Background service worker ("Mark chats open in another tab")
-
-A small event-driven background worker powers this feature. It adds **no permissions**.
-
-- **What it receives:** from the extension's own ChatGPT tabs only, the **conversation ID** each tab is showing (or "none"), plus Chrome's numeric **tab ID** for that tab.
-- **What it keeps:** a map from tab ID to conversation ID in `chrome.storage.session`, held in memory and **cleared when the browser closes**. It's never written to disk or exported.
-- **What it does:** tells your other ChatGPT tabs which conversations are open elsewhere, and on request switches to that tab (`tabs.update` with `active`) and focuses its window (`windows.update`).
-- **What it never does:** read tab URLs, tab titles or favicons. Without the `tabs` permission Chrome doesn't give them to us, and the worker never calls `tabs.query` or listens to `tabs.onUpdated`. It never reads conversation content and never makes network requests.
-- **Turning it off:** *Style → Mark chats open in another tab*. When it's off, tabs report nothing.
+It does **not** request `tabs`, `activeTab`, `scripting`, `cookies`, `history`, `webRequest`, or any other host access. It has **no background service worker** and runs nothing outside the ChatGPT tab and the popup while it's open.
 
 ## What is read
 
-Only inside the ChatGPT **sidebar** (`#ds-sidebar`):
+Only inside the ChatGPT **sidebar** (`aside[data-app-shell-left-panel-appearance]`, with older layouts as fallbacks):
 
-- The `href` of conversation links, to extract the conversation ID (for example `/c/<uuid>`).
-- The visible text of those links (the conversation title), to match your keyword rules. Titles are processed in memory and are **never stored**.
-- The current page path, when you open the popup, to tell which conversation is open.
+- The `href` of conversation, Project and custom-GPT links, to extract their IDs (for example `/c/<uuid>`, `/g/g-p-…`).
+- The visible text of those links (the conversation title), to match your keyword rules.
+- ChatGPT's own `aria-current` marker and the current page path, to know which conversation is open.
+
+When you open the popup:
+
+- **Conversation tab:** the content script tells the popup the open conversation's ID and visible title.
+- **Chats tab:** the content script sends the popup the list of conversations currently loaded in the sidebar, with each one's ID, visible title and current color, so you can color chats that aren't open.
+
+These titles exist only in memory, inside the ChatGPT tab and the open popup. They're **never stored**, never exported and never sent anywhere. Closing the popup discards them.
 
 ## What is stored (locally, `chrome.storage.local`)
 
 - Schema version and the enabled toggle
-- Manual colors, keyed by conversation ID (a UUID). No titles are stored.
+- Manual colors, keyed by conversation ID. No titles are stored.
+- Project/GPT colors, keyed by Project/GPT ID, plus the Project's display name as shown in the sidebar
 - Your categories, colors, and keywords
-- Appearance settings (thickness, opacity, radius)
+- Appearance settings: style (bar/fill), bar width/opacity/roundness, fill strength, and the open-chat outline (on/off, color, width, opacity)
+- The active sidebar color filter (a single color value), stored separately and not exported
 
-Export writes this same data to a JSON file you choose. Uninstalling the extension deletes it.
+Export writes your settings (not the filter) to a JSON file you choose. Uninstalling the extension deletes everything.
 
 ## Never accessed
 
 - Conversation messages or any content outside the sidebar links
 - Cookies, authentication tokens, passwords, or account details
-- Browsing history or any site other than chatgpt.com
+- Tab URLs or titles of any tab, browsing history, or any site other than chatgpt.com
 - ChatGPT's internal APIs or network traffic. Requests are neither read nor modified.
+- ChatGPT's own menus. The extension adds nothing interactive to the sidebar.
 
 No code is loaded remotely, and there is no `eval`. Everything that runs is in the packaged extension.

@@ -429,7 +429,45 @@ input.mono { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; }
 }
 .segmented input:checked + span { background: var(--bg); color: var(--fg); box-shadow: 0 1px 2px rgb(0 0 0 / 0.08), 0 0 0 1px var(--line); }
 .segmented input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 1px; }
-.sliders .slider.off { opacity: 0.4; }
+.sliders .slider.off, .outline-colors.off { opacity: 0.4; }
+
+/* ---------- Chats tab ---------- */
+.chat-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); overflow: hidden; }
+.chat-list:empty { display: none; }
+.chat + .chat { border-top: 1px solid var(--line); }
+.chat-row {
+  all: unset;
+  box-sizing: border-box;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  padding: 0 12px;
+  cursor: pointer;
+}
+.chat-row:hover { background: var(--soft); }
+.chat-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.chat.open .chat-row { background: var(--soft); }
+.chat-row .dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--c); }
+.chat-row .dot.none { background: transparent; box-shadow: inset 0 0 0 1.5px var(--line-strong); }
+.chat-title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-meta { flex: none; max-width: 96px; font-size: 11.5px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tag { flex: none; font-size: 10.5px; font-weight: 600; padding: 1px 6px; border-radius: 999px; background: var(--accent); color: var(--on-accent); }
+.chat-editor { display: grid; gap: 10px; padding: 10px 12px 12px; border-top: 1px solid var(--line); background: var(--bg); }
+.chat-editor .actions { margin: 2px -12px -12px; }
+
+/* ---------- Outline controls ---------- */
+.outline-colors { display: grid; gap: 8px; }
+.sw.auto { background: linear-gradient(135deg, var(--fg) 50%, var(--bg) 50%); box-shadow: inset 0 0 0 1px var(--line-strong); }
+.sw.auto[aria-pressed='true'] { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--fg); }
+.sw.auto[aria-pressed='true']::after { display: none; }
+.preview[data-outline='on'] .p-row.sel {
+  outline: var(--ow) solid color-mix(in srgb, var(--oc, currentColor) var(--oo), transparent);
+  outline-offset: calc(-1 * var(--ow));
+}
+.slider.toggle-row { grid-template-columns: 1fr auto; }
+.slider.toggle-row > span:empty { display: none; }
 .slider.toggle-row input { justify-self: end; }
 .sliders .toggle-row { padding-bottom: 10px; border-bottom: 1px solid var(--line); }
 .sliders { gap: 12px; }

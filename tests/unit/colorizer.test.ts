@@ -15,7 +15,7 @@ const GREEN = '#16a34a'; // Work
 
 let c: ReturnType<typeof createColorizer>;
 afterEach(() => c?.stop());
-const host = { write: vi.fn(), setFilter: vi.fn(), focusTab: vi.fn(), scanned: vi.fn() };
+const host = { setFilter: vi.fn() };
 
 function start(s: Settings = starter()) {
   c = createColorizer(host);
@@ -80,31 +80,30 @@ describe('colorizer on fixture sidebar', () => {
     expect(active()).toEqual([ID.ts]);
   });
 
-  it('"open in another tab" badge: shown for ids from the worker, switches via host, toggleable', () => {
+  it('list(): every sidebar chat with title, resolved color, source and open state (for the popup)', () => {
     mountLivePage(ID.meeting);
     const s = start();
-    const badges = () => [...document.querySelectorAll('.crc-open')].map((b) => b.parentElement!.getAttribute('data-crc'));
-    expect(badges()).toEqual([]);
-    c.setElsewhere([ID.ts, ID.project]);
-    expect(badges()).toEqual([ID.ts, ID.project]);
-    (document.querySelector(`[data-crc="${ID.ts}"] .crc-open`) as HTMLButtonElement).click();
-    expect(host.focusTab).toHaveBeenCalledWith(ID.ts);
-    c.setElsewhere([ID.project]);
-    expect(badges()).toEqual([ID.project]);
-    c.update({ ...s, appearance: { ...s.appearance, openTabs: false } });
-    expect(badges()).toEqual([]);
+    s.overrides[ID.plain] = '#123456';
+    s.groups[PROJECT] = { color: '#b08900', name: 'Side project' };
     c.update(s);
-    c.stop();
-    expect(document.querySelectorAll('.crc-open')).toHaveLength(0);
+    const list = c.list(`/c/${ID.meeting}`);
+    expect(list.map((e) => e.id)).toEqual([ID.ts, ID.meeting, ID.recipe, ID.plain, ID.project, ID.gpt]);
+    expect(list.find((e) => e.id === ID.ts)).toMatchObject({ title: 'Fix TypeScript bug in parser', color: BLUE, source: 'rule', label: 'Development', active: false });
+    expect(list.find((e) => e.id === ID.meeting)).toMatchObject({ source: 'rule', label: 'Work', active: true });
+    expect(list.find((e) => e.id === ID.plain)).toMatchObject({ color: '#123456', source: 'manual', label: null });
+    expect(list.find((e) => e.id === ID.project)).toMatchObject({ color: '#b08900', source: 'group', label: 'Side project' });
+    expect(list.filter((e) => e.active)).toHaveLength(1);
   });
 
-  it('reports every scan to the host (presence hook)', async () => {
+  it('list() is empty when there is no sidebar', () => {
+    start();
+    expect(c.list()).toEqual([]);
+  });
+
+  it('injects nothing interactive into rows', () => {
     mountLivePage(ID.meeting);
     start();
-    const n = host.scanned.mock.calls.length;
-    document.querySelector(`a[href="/c/${ID.ts}"]`)!.setAttribute('aria-current', 'page');
-    await settle();
-    expect(host.scanned.mock.calls.length).toBeGreaterThan(n);
+    expect(document.querySelectorAll('[data-crc] .crc-btn, [data-crc] .crc-open, [data-crc] > button:not([aria-label="Open conversation options"])')).toHaveLength(0);
   });
 
   it('highlight can be turned off independently, and stop() removes it', () => {
@@ -159,7 +158,7 @@ describe('colorizer on fixture sidebar', () => {
     expect(color(ID.plain)).toBe('#e03131');
   });
 
-  it('never creates duplicate controls under repeated mutations and updates', async () => {
+  it('never duplicates decoration under repeated mutations and updates', async () => {
     const { list } = mountPage();
     const s = start();
     for (let i = 0; i < 5; i++) {
@@ -167,7 +166,10 @@ describe('colorizer on fixture sidebar', () => {
       c.update(s);
       await settle();
     }
-    for (const a of document.querySelectorAll('#ds-sidebar [data-crc]')) expect(a.querySelectorAll('.crc-btn')).toHaveLength(1);
+    for (const a of document.querySelectorAll('#ds-sidebar [data-crc][data-crc-color]')) {
+      expect(a.querySelectorAll(':scope > .crc-bar')).toHaveLength(1);
+      expect(a.querySelectorAll(':scope > .crc-fill')).toHaveLength(1);
+    }
   });
 
   it('re-binds when the sidebar is removed and a new one inserted', async () => {
@@ -221,15 +223,21 @@ describe('colorizer on fixture sidebar', () => {
   it('applies appearance settings as CSS variables', () => {
     mountPage();
     const s = start();
-    c.update({ ...s, appearance: { mode: 'both', thickness: 2, opacity: 50, radius: 0, fill: 20, highlight: true, openTabs: true } });
-    expect(document.getElementById('crc-vars')!.textContent).toBe(':root{--crc-w:2px;--crc-o:0.5;--crc-r:0px;--crc-f:20%}');
+    const base = { mode: 'both', thickness: 2, opacity: 50, radius: 0, fill: 20, highlight: true, outlineWidth: 3, outlineOpacity: 80 } as const;
+    c.update({ ...s, appearance: { ...base, outlineColor: 'auto' } });
+    // 'auto' outline color leaves --crc-oc unset so CSS falls back to the row's text color.
+    expect(document.getElementById('crc-vars')!.textContent).toBe(
+      ':root{--crc-w:2px;--crc-o:0.5;--crc-r:0px;--crc-f:20%;--crc-ow:3px;--crc-oo:80%;}',
+    );
+    c.update({ ...s, appearance: { ...base, outlineColor: '#e03131' } });
+    expect(document.getElementById('crc-vars')!.textContent).toContain('--crc-oc:#e03131;');
     c.update({ ...s, appearance: { ...s.appearance, mode: 'bar' } });
     expect(document.getElementById('crc-vars')!.textContent).toContain('.crc-fill{display:none!important}');
     c.update({ ...s, appearance: { ...s.appearance, mode: 'fill' } });
     expect(document.getElementById('crc-vars')!.textContent).toContain('.crc-bar{display:none!important}');
   });
 
-  it('manual NONE and fallback NONE leave rows uncolored but still controllable', () => {
+  it('manual NONE and fallback NONE leave rows uncolored with no visual elements at all', () => {
     mountPage();
     const s = starter();
     s.fallback = NONE;
@@ -237,7 +245,8 @@ describe('colorizer on fixture sidebar', () => {
     start(s);
     expect(color(ID.ts)).toBeNull();
     expect(color(ID.plain)).toBeNull();
-    expect(document.querySelector(`[data-crc="${ID.ts}"] .crc-btn`)).not.toBeNull();
+    expect(document.querySelector(`[data-crc="${ID.ts}"] > .crc-bar, [data-crc="${ID.ts}"] > .crc-fill`)).toBeNull();
+    expect(c.list().find((e) => e.id === ID.ts)).toMatchObject({ color: null, source: 'manual' }); // still listed for the popup
   });
 
   it('does nothing (and does not throw) on an unsupported layout', async () => {

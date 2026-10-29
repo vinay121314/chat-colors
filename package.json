@@ -6,7 +6,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "vite build && vite build --mode content && vite build --mode background",
+    "build": "vite build && vite build --mode content",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",

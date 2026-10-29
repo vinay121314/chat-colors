@@ -5,9 +5,6 @@
   "description": "Color-code ChatGPT conversations in the sidebar with manual colors and local keyword rules. No data leaves your browser.",
   "minimum_chrome_version": "114",
   "permissions": ["storage"],
-  "background": {
-    "service_worker": "background.js"
-  },
   "action": {
     "default_popup": "popup.html",
     "default_title": "ChatGPT Recents Colorizer"

@@ -1,4 +1,4 @@
-# QA report — v1.0.0 (2026-10-28, revision 2)
+# QA report — v1.0.0 (2026-10-29, revision 3: simplified sidebar)
 
 ## Automated results
 
@@ -6,57 +6,55 @@
 |---|---|
 | `npm run lint` (ESLint + bans on `innerHTML`/`eval`) | ✅ pass |
 | `npm run typecheck` (TS strict, `noUncheckedIndexedAccess`) | ✅ pass |
-| `npm test`: Vitest, 5 files | ✅ 97/97 |
-| `npm run build`: no runtime deps | ✅ pass |
-| `npm run test:e2e`: Playwright, built extension in Chromium on the fixture page | ✅ 14/14 |
+| `npm test`: Vitest, 5 files | ✅ 125/125 |
+| `npm run build`: `dist/` = manifest, content script and CSS, popup. **No background worker.** | ✅ pass |
+| `npm run test:e2e`: Playwright, built extension in Chromium, two fixture pages (original + verified live structure) | ✅ 28/28 |
 
-## Revision 2: reported "colors not applied" and "UI looks cheap"
+## Revision 3: changes after live testing
 
-The root causes were likely but couldn't be confirmed without a logged-in session:
+**Reported live:** the injected color dot overlapped or competed with ChatGPT's native three-dot menu.
 
-1. **Painting.** The colored edge was an inset `box-shadow` on the row link. Any child with an opaque background (typical for hover and selected states) covers it completely. It's now a dedicated overlay bar element (`z-index: 2`, `pointer-events: none`). A new e2e test covers the whole row with an opaque child and asserts the bar is still the top-most painted element.
-2. **Detection.** The root was taken from a fixed container verified only while logged out. Now:
-   - the root is derived from the conversation links themselves (inside an `<aside>` or navigation landmark) when the known containers hold none;
-   - detection keeps retrying while zero rows are found;
-   - conversation ids accept any URL-safe token, not only UUIDs.
-3. **Visibility.** The popup header now reports "N chats detected" or "Sidebar not recognized". *Data → Copy diagnostics* produces a structure-only report: no titles, ids and slugs masked. Unit and e2e tests check that nothing private leaks.
+- **Removed the in-row color dot and the in-page picker.** Nothing interactive is injected into ChatGPT's rows any more. Rows get only `aria-hidden`, `pointer-events: none` visual elements.
+- **Removed the "already open in another tab" badge** with its Style setting, messaging, session storage, tests and docs, and **removed the background service worker** (`dist/` has no `background.js`). The extension runs no background process. An `openTabs` value saved by the previous build is dropped on load.
+- **Colors are assigned in the popup:**
+  - **Chats** (new tab): every chat loaded in the sidebar, open or not, with search. Each chat has an inline editor: category colors, 8 presets, custom HEX, Reset to automatic, Remove color.
+  - **Conversation:** the open chat, including the Project scope switch.
+- **Native three-dot menu integration: not implemented.** The menu's markup couldn't be inspected on a logged-in session, so adding an item would be unverified and fragile. Per the brief, the native menu is left untouched.
+- **Borders:** Bar is now the default style (no background tint). Fill and Bar + fill remain opt-in. Bar width, opacity and roundness are configurable. Any HEX plus presets are available per chat.
+- **Open-chat outline:**
+  - on/off switch
+  - color: **Auto** (the sidebar's text color, adapting to light and dark), 7 presets or any HEX
+  - width 1–4 px and opacity 20–100%
+  - follows SPA navigation and Back/Forward
+  - uses the system `Highlight` color in Windows high-contrast mode
+  - keeps the chat's own bar color
 
-UI redesign:
-- **Popup:** tabbed (Conversation / Rules / Style / Data), with a token-based neutral design, custom switches, collapsible category rows, keyword chips, a live style preview, and empty states.
-- **In-page picker:** redesigned, and its theme now follows ChatGPT's actual background color instead of the OS setting.
+## Verified (fixtures in a real Chromium, extension loaded from `dist/`)
 
-Bugs found during this revision:
-- **Picker layout overflow.** `1fr` grid columns blew out to the content's width. Fixed with `minmax(0, 1fr)` and fixed-size swatches.
-- **All popup tab panels visible at once.** An author `display: grid` overrode the UA `[hidden]` rule. Fixed, and an e2e test now asserts that inactive panels are hidden.
-
-## Verified (fixture page in a real Chromium, extension loaded from `dist/`)
-
-- Injects only on `https://chatgpt.com/*` and decorates only sidebar conversation links (`/c/`, `/g/g-p-…/c/`, `/g/g-…/c/`).
-- The bar stays visible above opaque row content. No layout shift: row boxes are identical with decoration on and off.
-- The in-row control never navigates. Manual colors persist through reload and rename, and auto colors re-classify on rename.
-- Custom HEX, Remove, Reset, and invalid HEX rejected.
-- Keyboard: Tab reaches the control, Enter opens it, Escape closes it and returns focus. Popup tabs follow the ARIA arrow-key pattern.
-- Multi-tab live updates. Popup ↔ content messaging works without the `tabs` permission.
-- Popup Conversation tab with an active ChatGPT tab: status "7 chats detected", automatic category badge, and manual color applied live.
-- Light and dark themes for the popup and the picker. Palette contrast is ≥ 3:1 on light and dark sidebars.
+- **Native controls:** at the center of ChatGPT's three-dot menu, the topmost element is the menu itself in **every** style mode (Bar, Fill, Bar + fill). Our elements have `pointer-events: none`. The menu click works and doesn't navigate. The row link navigates normally.
+- **Nothing injected:** each row contains no interactive element of ours (`button`, `[tabindex]`, `[role=button]`); only ChatGPT's own link and menu remain.
+- **No layout shift:** listitem and link boxes are identical with decoration on and off.
+- **Chats tab:** colors a chat that isn't open. The color persists through reload and survives a rename (auto colors re-classify). HEX, Remove and Reset work; invalid HEX is rejected; search works; rows are keyboard operable (Tab, Enter) and keep focus across re-render.
+- **Filtering:** popup chips and the sticky pill with Clear. **Multi-tab** live updates.
+- **Outline:** a preset color, a HEX color, width 4, opacity 100, Auto, and off are each applied to the open row. An invalid outline HEX is rejected; an empty value means Auto.
+- **Projects:** coloring a whole Project through the popup's scope switch; a chat override still wins; removable in the Rules tab.
+- **Fresh install:** colors nothing and categorizes nothing; a manual color from the Chats tab works.
+- **Themes:** light and dark for the popup and sidebar. Palette contrast is ≥ 3:1.
 
 ## Live chatgpt.com verification
 
-| Item | Status |
-|---|---|
-Source: a logged-in diagnostics report from the user's own Chrome (2026-10-29). That report summarized results; it did not include raw DOM.
+Source: a logged-in diagnostics report and a screenshot from the user's own Chrome (2026-10-29). The report summarized results; it didn't include raw DOM.
 
 | Item | Status |
 |---|---|
-| Sidebar root is `aside[data-app-shell-left-panel-appearance]`. The older `#ds-sidebar` / history-nav containers are absent when logged in. | ✅ Verified live. Now the first selector; the others remain as fallbacks. |
-| Row = non-link wrapper `role="listitem"` + `data-sidebar-cycle-item` + `data-thread-title-trigger` (~266×37) around the `<a>` (~247 px) | ✅ Verified live. `rowBox()` prefers this wrapper. |
-| Regular `/c/<uuid>` links detected and decorated (25 rows, 2 colored) | ✅ Verified live |
-| Open chat's link has `aria-current="page"` | ✅ Verified live. Used by `activeRow()`, with the URL as fallback. |
-| Navigation API available | ✅ Verified live |
-| No unrecognized `/g/` links | ✅ Verified live (report) |
-| **Project** chats and Project entries | ⏳ **UNVERIFIED**. The report didn't include Project or GPT chat counts. |
+| Sidebar root `aside[data-app-shell-left-panel-appearance]` | ✅ Verified live |
+| Row = non-link `role="listitem"` + `data-sidebar-cycle-item` + `data-thread-title-trigger` around the `<a>` | ✅ Verified live |
+| Regular `/c/<uuid>` chats detected and decorated | ✅ Verified live |
+| Open chat marked with `aria-current="page"`; Navigation API available | ✅ Verified live |
+| Previous in-row dot overlapped the native three-dot menu | ✅ Observed live → **fixed by removing the dot** |
+| Revision 3 (no in-row controls, Chats tab, outline options) on the live site | ⏳ **Not yet re-checked live** |
+| **Project** chats and Project entries | ⏳ **UNVERIFIED** |
 | **Custom GPT** chats and GPT entries | ⏳ **UNVERIFIED** |
-| Dot position vs. native three-dot menu | ⏳ **Visually unverified live.** Covered by the live-structure fixture with an approximate menu offset. |
-| Class names are generated atomic CSS and are not used | ✅ Verified live |
+| Native three-dot menu markup (for possible integration) | ⏳ **Not inspected.** Integration not built. |
 
-The fixture `tests/fixtures/chatgpt-live.html` and the suite `tests/e2e/live-structure.spec.ts` reproduce the verified structure: decoration target, no layout shift, the native menu still works, and the dot sits clear of it. That is a fixture, not proof of compatibility with chatgpt.com itself.
+Fixtures (`tests/fixtures/chatgpt-live.html`, `tests/e2e/live-structure.spec.ts`) reproduce the verified structure. They are not proof of compatibility with chatgpt.com itself.

@@ -60,7 +60,6 @@ export const kindOf = (key: string) => (key.startsWith('g-p-') ? 'Project' : 'GP
 
 export const ID_ATTR = 'data-crc';
 export const COLOR_ATTR = 'data-crc-color';
-const BTN_CLASS = 'crc-btn';
 const BAR_CLASS = 'crc-bar';
 const FILL_CLASS = 'crc-fill';
 const POS_CLASS = 'crc-pos';
@@ -182,11 +181,6 @@ export function activeRow<R extends { el: Element; id: string }>(rows: R[], path
   return id ? rows.find((r) => r.id === id) : undefined;
 }
 
-/** The chat/Project/GPT link a decorated row container stands for. */
-function primaryLink(box: Element): HTMLAnchorElement | null {
-  if (box instanceof HTMLAnchorElement && isTarget(box)) return box;
-  return [...box.querySelectorAll<HTMLAnchorElement>('a[href]')].find(isTarget) ?? null;
-}
 
 /**
  * The visual row for a conversation link. On some layouts the <a> wraps only the title and the
@@ -237,12 +231,7 @@ function ensureChild(el: Element, cls: string, want: boolean): void {
  * row styles are never modified, apart from position:relative on a static row.
  * Returns the decorated element.
  */
-export function decorate(
-  row: Row,
-  color: string | null,
-  title: string,
-  onOpen: ((btn: HTMLButtonElement, row: Row) => void) | null,
-): HTMLElement {
+export function decorate(row: Row, color: string | null): HTMLElement {
   const el = rowBox(row.el) as HTMLElement;
   const { id } = row;
   setAttr(el, ID_ATTR, id);
@@ -257,38 +246,9 @@ export function decorate(
     if (getComputedStyle(el).position === 'static') el.classList.add(POS_CLASS);
   }
 
+  // Purely visual, pointer-events:none: nothing interactive is added to ChatGPT's rows.
   ensureChild(el, FILL_CLASS, !!color);
   ensureChild(el, BAR_CLASS, !!color);
-
-  if (!onOpen) return el;
-  let btn = child(el, BTN_CLASS) as HTMLButtonElement | null;
-  if (!btn) {
-    btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = BTN_CLASS;
-    btn.setAttribute('aria-haspopup', 'dialog');
-    btn.setAttribute('aria-expanded', 'false');
-    const dot = document.createElement('span');
-    dot.className = 'crc-dot';
-    btn.append(dot);
-    const b = btn;
-    // Stop at the button so the anchor never navigates and ChatGPT's root-delegated handlers never see it.
-    b.addEventListener('pointerdown', (e) => e.stopPropagation());
-    b.addEventListener('mousedown', (e) => e.stopPropagation());
-    b.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const box = b.parentElement;
-      const rid = box?.getAttribute(ID_ATTR);
-      const a = box ? primaryLink(box) : null;
-      if (a && rid) onOpen(b, { el: a, id: rid });
-    });
-    // Native <button> turns Enter/Space into click; just keep the keys away from ChatGPT's shortcuts.
-    b.addEventListener('keydown', (e) => e.stopPropagation());
-    el.append(btn);
-  }
-  setAttr(btn, 'aria-label', `Set color for ${title || 'conversation'}`);
-  setAttr(btn, 'title', 'Set color');
   return el;
 }
 
@@ -301,8 +261,6 @@ export function undecorate(el: Element): void {
   (el as HTMLElement).style?.removeProperty('--crc-c');
   el.removeAttribute(HIDDEN_ATTR);
   el.removeAttribute(ACTIVE_ATTR);
-  child(el, OPEN_CLASS)?.remove();
-  child(el, BTN_CLASS)?.remove();
   child(el, BAR_CLASS)?.remove();
   child(el, FILL_CLASS)?.remove();
 }
@@ -312,36 +270,6 @@ export function undecorate(el: Element): void {
 
 const HIDDEN_ATTR = 'data-crc-hidden';
 const ACTIVE_ATTR = 'data-crc-active';
-
-const OPEN_CLASS = 'crc-open';
-
-/**
- * "Open in another tab" badge: a small button that asks the worker to switch to that tab instead of
- * opening a duplicate. The row link itself keeps ChatGPT's native behaviour.
- */
-export function setOpenBadge(box: Element, on: boolean, focus: (id: string) => void): void {
-  const existing = child(box, OPEN_CLASS);
-  if (!on) {
-    existing?.remove();
-    return;
-  }
-  if (existing) return;
-  const b = document.createElement('button');
-  b.type = 'button';
-  b.className = OPEN_CLASS;
-  b.title = 'Open in another tab. Switch to it';
-  b.setAttribute('aria-label', 'Open in another tab. Switch to it');
-  b.addEventListener('pointerdown', (e) => e.stopPropagation());
-  b.addEventListener('mousedown', (e) => e.stopPropagation());
-  b.addEventListener('keydown', (e) => e.stopPropagation());
-  b.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const id = b.parentElement?.getAttribute(ID_ATTR); // read at click time (rows get recycled)
-    if (id) focus(id);
-  });
-  box.append(b);
-}
 
 /** Marks the row of the conversation open in this tab (outlined by content.css). */
 export function setActive(el: Element, on: boolean): void {
@@ -436,7 +364,7 @@ function tree(el: Element, depth = 0): string[] {
   const out = [pad + describe(el)];
   for (const n of el.childNodes) {
     if (n.nodeType === Node.TEXT_NODE && n.nodeValue?.trim()) out.push(`${pad}  #text(${n.nodeValue.trim().length})`);
-    else if (n instanceof Element && ![BTN_CLASS, BAR_CLASS, FILL_CLASS, OPEN_CLASS].some((c) => n.classList.contains(c))) out.push(...tree(n, depth + 1));
+    else if (n instanceof Element && ![BAR_CLASS, FILL_CLASS].some((c) => n.classList.contains(c))) out.push(...tree(n, depth + 1));
   }
   return out;
 }

@@ -1,14 +1,16 @@
 /*
- * Injected on chatgpt.com. Only our own elements (.crc-*) are styled; ChatGPT's row styles are not
- * touched except `position: relative` on rows that were static (no visual/layout effect by itself).
- * !important is used only on our own elements so page-wide resets can't hide them.
+ * Injected on chatgpt.com. Purely visual: nothing here is interactive except the filter pill's Clear
+ * button, which only exists while a filter is active. Only our own elements/attributes (.crc-*,
+ * data-crc-*) are styled; ChatGPT's row styles are not touched except `position: relative` on rows
+ * that were static (no visual/layout effect by itself). !important is used only on our own elements
+ * so page-wide resets can't hide them.
  */
 
 .crc-pos {
   position: relative;
 }
 
-/* Color bar: our own element, painted above the row's own backgrounds (hover/selected states). */
+/* Color bar: our own element, painted above the row's own backgrounds, never takes clicks. */
 .crc-bar {
   position: absolute !important;
   left: 0 !important;
@@ -27,10 +29,7 @@
   transition: background-color 0.2s ease;
 }
 
-/*
- * Fill: translucent tint over the whole row, following the row's own rounding. Painted above the
- * row's backgrounds (so it can't be hidden by them) but kept light enough that text stays crisp.
- */
+/* Fill (opt-in): translucent tint over the whole row, following the row's own rounding. */
 .crc-fill {
   position: absolute !important;
   inset: 0 !important;
@@ -45,118 +44,19 @@
   transition: background-color 0.2s ease;
 }
 
-/* In-row trigger: 24px hit area, subtle until hover/focus. */
-.crc-btn {
-  all: unset;
-  box-sizing: border-box !important;
-  position: absolute !important;
-  right: 36px; /* clears ChatGPT's own row menu button (offset UNVERIFIED on live site) */
-  top: 50% !important;
-  width: 24px !important;
-  height: 24px !important;
-  margin-top: -12px !important;
-  display: grid !important;
-  place-items: center !important;
-  border-radius: 7px !important;
-  cursor: pointer !important;
-  opacity: 0;
-  z-index: 3 !important;
-  transition:
-    opacity 0.15s ease,
-    background-color 0.15s ease;
-}
-
-.crc-btn:hover {
-  background: color-mix(in srgb, currentColor 10%, transparent) !important;
-}
-
-.crc-dot {
-  display: block !important;
-  width: 10px !important;
-  height: 10px !important;
-  border-radius: 50% !important;
-  background: var(--crc-c) !important;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--crc-c) 22%, transparent) !important;
-}
-
-[data-crc]:not([data-crc-color]) > .crc-btn .crc-dot {
-  background: transparent !important;
-  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, currentColor 55%, transparent) !important;
-}
-
-[data-crc]:hover > .crc-btn,
-[data-crc]:focus-within > .crc-btn,
-.crc-btn:focus-visible,
-.crc-btn[aria-expanded='true'] {
-  opacity: 1;
-}
-
-.crc-btn:focus-visible {
-  outline: 2px solid color-mix(in srgb, currentColor 70%, transparent) !important;
-  outline-offset: 1px !important;
-}
-
 /*
- * Open conversation: an inset outline in the text color (contrasts in light and dark themes).
- * Outlines take no layout space and are drawn over the fill, so the assigned color stays visible.
+ * Open conversation: an inset outline. Color defaults to the row's text color (contrasts in light and
+ * dark themes) or a user-chosen HEX; width and opacity are configurable. Outlines take no layout space
+ * and don't hide the bar/fill.
  */
 [data-crc-active] {
-  outline: 2px solid color-mix(in srgb, currentColor 65%, transparent) !important;
-  outline-offset: -2px !important;
+  outline: var(--crc-ow, 2px) solid color-mix(in srgb, var(--crc-oc, currentColor) var(--crc-oo, 65%), transparent) !important;
+  outline-offset: calc(-1 * var(--crc-ow, 2px)) !important;
 }
 @media (forced-colors: active) {
   [data-crc-active] {
     outline-color: Highlight !important;
   }
-}
-
-/*
- * "Open in another tab" badge: always visible (it's information, not a hover action), sits left of
- * our color dot. Frosted pill so it stays legible over a long, truncated title.
- */
-.crc-open {
-  all: unset;
-  box-sizing: border-box !important;
-  position: absolute !important;
-  right: 62px;
-  top: 50% !important;
-  width: 22px !important;
-  height: 22px !important;
-  margin-top: -11px !important;
-  display: grid !important;
-  place-items: center !important;
-  border-radius: 7px !important;
-  cursor: pointer !important;
-  z-index: 3 !important;
-  background: color-mix(in srgb, currentColor 9%, transparent) !important;
-  backdrop-filter: blur(6px) !important;
-  opacity: 0.85;
-}
-/* Icon: two overlapping windows. */
-.crc-open::before,
-.crc-open::after {
-  content: '';
-  position: absolute;
-  width: 8px;
-  height: 7px;
-  border: 1.5px solid currentColor;
-  border-radius: 2px;
-}
-.crc-open::before {
-  transform: translate(-2px, 2px);
-}
-.crc-open::after {
-  transform: translate(2px, -2px);
-  background: color-mix(in srgb, currentColor 18%, transparent);
-}
-.crc-open:hover {
-  opacity: 1;
-  background: color-mix(in srgb, currentColor 16%, transparent) !important;
-}
-.crc-open:focus-visible {
-  opacity: 1;
-  outline: 2px solid currentColor !important;
-  outline-offset: 1px !important;
 }
 
 /* Filter: rows that don't match the chosen color are hidden; a sticky pill says so. */
@@ -211,8 +111,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .crc-bar,
-  .crc-fill,
-  .crc-btn {
+  .crc-fill {
     transition: none !important;
   }
 }

@@ -1,74 +1,75 @@
 # Architecture
 
 ```
-public/manifest.json      MV3: "storage" permission + content script on https://chatgpt.com/*
-public/content.css        Border + control styles, scoped to data-crc-* / crc-* names
+public/manifest.json      MV3: "storage" permission + content script on https://chatgpt.com/*. No background worker.
+public/content.css        Bar, fill, open-chat outline and filter-pill styles, scoped to data-crc-* / crc-* names
 src/core/schema.ts        Settings types, defaults, validation, migration, import parsing   (pure)
-src/core/rules.ts         resolveColor(): manual > first matching enabled rule > fallback    (pure)
-src/core/storage.ts       chrome.storage.local load/save/update/onChange + message name
-src/content/adapter.ts    THE ONLY ChatGPT-DOM-aware module: root, row discovery, ID, title, decorate/undecorate
-src/content/colorizer.ts  Observers, rAF batching, sync rows to settings, current-conversation lookup  (no chrome.*)
-src/content/picker.ts     In-page color picker (shadow DOM + native popover)
-src/content/main.ts       Content entry: wires colorizer to storage and popup messages
-src/popup/*               Popup UI (plain DOM)
+src/core/rules.ts         resolveColor(): manual > Project/GPT > first matching enabled rule > fallback   (pure)
+src/core/storage.ts       chrome.storage.local load/save/update/onChange, filter key, message names
+src/content/adapter.ts    THE ONLY ChatGPT-DOM-aware module: root, rows, ids, titles, active row, decorate/undecorate, diagnostics
+src/content/colorizer.ts  Observers, rAF batching, sync rows to settings, current() and list() for the popup  (no chrome.*)
+src/content/main.ts       Content entry: wires the colorizer to storage and popup messages
+src/popup/*               Popup UI (plain DOM): Conversation, Chats, Rules, Style, Data
 ```
 
 Layering: `core` knows nothing about the DOM or ChatGPT. `adapter` knows nothing about settings or storage. Only `main.ts` and `popup.ts` touch `chrome.*` (via `storage.ts`).
 
+**Nothing interactive is injected into ChatGPT's sidebar.** Rows get only `aria-hidden`, `pointer-events: none` visual elements (bar and fill), a few `data-crc-*` attributes, and the outline. Colors are assigned from the popup. The only element of ours you can click in the page is the filter pill's *Clear* button, which exists only while a filter is active.
+
 ## Data flow
 
-1. `main.ts` loads settings, then `colorizer.update(settings)`.
-2. The colorizer finds the sidebar root (`adapter.findRoot`), scans rows and, for each row, calls `resolveColor(id, title)` and then `adapter.decorate`.
-3. Any settings write (popup, in-row picker, or another tab) fires `storage.onChanged` in every ChatGPT tab, which calls `update()` and rescans.
-4. Popup → `chrome.tabs.sendMessage(activeTabId, {type: 'crc:current'})` → the content script replies `{id, title}`. The popup never reads the tab URL, so the `tabs` permission isn't needed.
+1. `main.ts` loads settings and the filter, then calls `colorizer.update(settings)`.
+2. The colorizer finds the sidebar root (`adapter.findRoot`), scans rows and, for each row, calls `resolveColor(id, title, settings, projectKey)` and then `adapter.decorate`.
+3. Any settings write (popup, or another tab) fires `storage.onChanged` in every ChatGPT tab, which calls `update()` and rescans.
+4. Popup ↔ content messages (`chrome.tabs.sendMessage` to the active tab's ID; the popup never reads tab URLs, so no `tabs` permission is needed):
+   - `crc:current` returns the open conversation (ID, visible title, Project/GPT) plus the color legend and current filter.
+   - `crc:list` returns `ListEntry[]`: every conversation loaded in the sidebar (ID, visible title, resolved color, source, Project, whether it's open). This feeds the **Chats** tab, so any chat can be colored, open or not. The popup recalculates each row's color from current settings, so the list updates instantly after a change. Titles are never stored.
+   - `crc:diag` returns the structure-only diagnostics report.
 
 ## Observation strategy
 
-- **Sidebar observer:** `childList` + `subtree` + `characterData` + `attributes` filtered to `href`, on the sidebar root only. It catches new rows, title edits and recycled rows.
-- **Root observer:** `childList` + `subtree` on `body`, whose callback only checks `root.isConnected`. It is needed to detect the sidebar being replaced or first rendered. The callback is O(1) while the sidebar is present.
-- Both observers schedule one `requestAnimationFrame` scan. Many mutations collapse into one pass.
-- Our own writes are attributes the observer ignores (`data-crc*`, `style`) plus one button per row, created once. That causes at most one extra no-op scan, with no feedback loop.
-
-## Background worker (`src/background/`)
-
-Event-driven MV3 service worker for "already open in another tab". It adds no permissions.
-
-- **Presence:** the content script sends `crc:presence {id}` (the conversation ID, or `null`) after scans, when the extension is turned on or off, and on `pagehide`. The worker stores `tabId → id` in `chrome.storage.session` and replies with the IDs open in other tabs. It broadcasts `crc:open-elsewhere {ids}` to every known tab and prunes tabs that don't answer.
-- **Switching:** `crc:focus {id}` → `findOtherTab` (never the sender) → `tabs.update(active)` → `windows.update(focused)`. The window ID comes from the `update` result, so tabs dragged between windows still work. A tab that has vanished is forgotten.
-- **Lifecycle:** `tabs.onRemoved` handles closed tabs. `pagehide` and pruning handle navigation away and reloads. In-app navigation is re-reported from scans.
-- **Suspension:** listeners are registered synchronously at top level, and all state is in `storage.session`. Read-modify-write cycles go through a promise queue, so concurrent reports aren't lost.
-- **Never used:** `tabs.query`, `tabs.onUpdated`, or URL/title fields. `tests/unit/background.test.ts` uses a fake API without them.
-- Pure logic lives in `registry.ts` (`othersFor`, `findOtherTab`).
+- **Sidebar observer:** `childList` + `subtree` + `characterData` + `attributes` filtered to `href` and `aria-current`, on the sidebar root only. It catches new rows, title edits, recycled rows and ChatGPT moving its "open chat" marker.
+- **Root observer:** `childList` + `subtree` on `body`, whose callback only checks `root.isConnected` (and whether rows exist yet). The callback is O(1) while the sidebar is present.
+- **Navigation:** the Navigation API `currententrychange` event (verified available live) and `popstate`.
+- All of these schedule one `requestAnimationFrame` scan, so many mutations collapse into one pass. Our own writes are attributes the observer ignores and at most two `aria-hidden` spans per colored row, so there's no feedback loop.
 
 ## Decoration
 
-- **Row container (`rowBox`):** on some layouts the `<a>` wraps only the title and the full-width row is an ancestor. Decorating the `<a>` put the bar and dot on top of the title, which was reported on the live site. Decoration goes on the outermost ancestor that still contains exactly this one conversation and is still one row tall. It never climbs into `nav`, `aside`, `section`, `ul` or `ol`. The result is cached per link in a WeakMap.
-- **Open chat (`activeRow` + `data-crc-active`):** across the whole list, ChatGPT's `aria-current="page"` wins (verified live), and the URL is used only when no row is marked, so there are never two active rows. The CSS outline (`outline-offset: -2px`, the text color at 65%, `Highlight` in forced-colors mode) takes no layout space and doesn't hide the bar or fill. Updates come from the sidebar observer (`attributeFilter` includes `aria-current`), the Navigation API `currententrychange` event (verified available live) and `popstate`. Toggled by `appearance.highlight`.
-- **Fill:** `<span class="crc-fill">` is `inset: 0`, `border-radius: inherit`, and a translucent `color-mix()` of the color at `--crc-f`. It sits at `z-index: 1`, under the bar (2) and the control (3). The mode (`bar`, `fill` or `both`) is applied by hiding one element through the `crc-vars` style.
-- `data-crc="<id>"` marks a row. `data-crc-color` plus a `--crc-c` custom property sets the color.
-- The color is drawn by our own `<span class="crc-bar">`, absolutely positioned at the row's left edge with `z-index: 2` and `pointer-events: none`. An earlier inset `box-shadow` on the row was invisible whenever a child of the row painted an opaque background, which is common in hover and selected states. The bar paints above those backgrounds, never takes clicks, causes no layout shift, and doesn't change ChatGPT's own row styles. A row that was `position: static` gets `position: relative`, which has no visual effect by itself. Thickness, opacity and radius are `:root` variables in one `<style id="crc-vars">`.
-- The control is a `<button>` absolutely positioned inside the row, visible on hover and focus. Its click events call `preventDefault` and `stopPropagation`, so the anchor doesn't navigate and ChatGPT's root-delegated handlers never see the click.
-- Disable or cleanup removes every attribute, class, button and style that was added.
+- **Row container (`rowBox`):** the verified live wrapper `[data-sidebar-cycle-item]` / `[role="listitem"]` is preferred, as long as it holds exactly this one chat. Otherwise it climbs to the outermost ancestor that contains exactly this one conversation and is still one row tall, never climbing into `nav`, `aside`, `section`, `ul` or `ol`. The result is cached per link in a WeakMap.
+- **Bar:** `<span class="crc-bar" aria-hidden>`, absolutely positioned at the row's left edge, `z-index: 2`, `pointer-events: none`. It paints above the row's own hover and selected backgrounds, causes no layout shift, and doesn't change ChatGPT's row styles. A row that was `position: static` gets `position: relative`, which has no visual effect by itself.
+- **Fill (opt-in):** `<span class="crc-fill" aria-hidden>`, `inset: 0`, `border-radius: inherit`, a translucent `color-mix()` at `--crc-f`, `z-index: 1`. The style (`bar` by default, `fill` or `both`) is applied by hiding one element through the `crc-vars` style.
+- **Open chat (`activeRow` + `data-crc-active`):** across the whole list, ChatGPT's `aria-current="page"` wins (verified live); the URL is used only when no row is marked, so there are never two active rows. The outline is `outline: var(--crc-ow) solid color-mix(var(--crc-oc, currentColor) var(--crc-oo), transparent)`, inset by its own width. *Auto* leaves `--crc-oc` unset, so it follows the sidebar's text color in light and dark themes. In Windows high-contrast mode (`forced-colors`) it uses `Highlight`. It takes no layout space and doesn't hide the bar or fill. Toggled by `appearance.highlight`.
+- **Filter:** `data-crc-hidden` on non-matching rows (`display: none`) plus a sticky pill above the first chat row, with a *Clear* button.
+- All CSS variables live in one `<style id="crc-vars">`. Disabling or cleaning up removes every attribute, class, element and style that was added.
 
-## Storage schema (v1)
+## Storage schema (v2)
 
 ```ts
-{ version: 1, enabled: boolean,
-  overrides: { [conversationUuid]: '#rrggbb' | 'none' },   // 'none' = manually uncolored
-  categories: [{ id, name, color: '#rrggbb', enabled, rules: [{ keyword, enabled }] }], // order = priority
+{ version: 2, enabled: boolean,
+  overrides: { [conversationId]: '#rrggbb' | 'none' },       // 'none' = manually uncolored
+  groups:    { [projectOrGptId]: { color: '#rrggbb', name } }, // name = display only
+  categories: [{ id, name, color, enabled, rules: [{ keyword, enabled }] }], // order = priority
   fallback: '#rrggbb' | 'none',
-  appearance: { thickness: 2..6, opacity: 10..100, radius: 0..12 } }
+  appearance: { mode: 'bar'|'fill'|'both', thickness: 2..6, opacity: 10..100, radius: 0..12, fill: 5..40,
+                highlight: boolean, outlineColor: '#rrggbb'|'auto', outlineWidth: 1..4, outlineOpacity: 20..100 } }
+// separate key 'crc:filter': '#rrggbb' (not exported)
 ```
 
-`migrate()` turns anything into valid settings: bad fields fall back to defaults and bad entries are dropped. Data from a newer version is refused and never overwritten. To add v2, bump `SCHEMA_VERSION` and transform `version < 2` input inside `migrate()`.
+`migrate()` turns anything into valid settings: bad fields fall back to defaults, bad entries are dropped, and fields from removed features (such as `openTabs`) are discarded. Data from a newer version is refused and never overwritten. The v1 → v2 migration removed only the old default keywords and default grey fallback.
 
 ## When ChatGPT changes its DOM
 
 Root discovery (`findRoot`):
-1. Use a known container (`#ds-sidebar`, the history nav and similar) if it holds conversation links.
+1. Use a known container (`aside[data-app-shell-left-panel-appearance]`, verified live, then older fallbacks) if it holds conversation links.
 2. Otherwise use the `<aside>` or outermost navigation landmark around the first conversation link. Links in message bodies are never inside navigation, so they're never picked.
-3. While zero rows are found, the root observer keeps re-checking. This covers a list that renders late or somewhere unexpected.
+3. While zero rows are found, the root observer keeps re-checking.
 
-Conversation ids accept any URL-safe token (UUIDs are lowercased), so an id-format change doesn't break detection.
+Conversation IDs accept any URL-safe token (UUIDs are lowercased).
 
-If it still breaks: get the report from *Data → Copy diagnostics* (`adapter.diagnose()`, structure only), then edit `ROOT_SELECTORS` and `CONV_PATH` in `src/content/adapter.ts` and update `tests/fixtures/*`.
+If it still breaks: get the report from *Data → Copy diagnostics* (`adapter.diagnose()`, structure only), then edit `ROOT_SELECTORS`, `ROW_SELECTOR` and `CONV_PATH` in `src/content/adapter.ts` and update `tests/fixtures/*`.
+
+## Removed by design
+
+- **In-row color dot and in-page picker:** they competed with ChatGPT's native three-dot menu on the live site. Replaced by the popup's *Chats* tab.
+- **"Already open in another tab" badge and its background service worker:** removed at the user's request. The extension has no background process.
+- **Native three-dot menu integration:** not implemented. The menu's markup couldn't be verified on a logged-in session, so it's left untouched.

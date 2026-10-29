@@ -32,9 +32,13 @@ export interface Appearance {
   fill: number; // %, 5–40 (fill tint strength)
   /** Outline the conversation open in this tab (independent of its color). */
   highlight: boolean;
-  /** Mark chats already open in another tab and offer to switch there. Off = this tab isn't reported either. */
-  openTabs: boolean;
+  /** Outline color: #rrggbb, or 'auto' = the sidebar's text color (adapts to light/dark). */
+  outlineColor: string;
+  outlineWidth: number; // px, 1–4
+  outlineOpacity: number; // %, 20–100
 }
+
+export const AUTO = 'auto';
 
 /** A color for every chat inside a Project or custom GPT. */
 export interface GroupColor {
@@ -115,7 +119,18 @@ export function defaultSettings(): Settings {
       cat('research', 'Research', '#0e9fb3'),
     ],
     fallback: NONE,
-    appearance: { mode: 'both', thickness: 4, opacity: 100, radius: 6, fill: 16, highlight: true, openTabs: true },
+    // Bar only by default: subtle, no background tint (Fill is opt-in under Style).
+    appearance: {
+      mode: 'bar',
+      thickness: 4,
+      opacity: 100,
+      radius: 6,
+      fill: 16,
+      highlight: true,
+      outlineColor: AUTO,
+      outlineWidth: 2,
+      outlineOpacity: 65,
+    },
   };
 }
 
@@ -209,7 +224,9 @@ export function migrate(raw: unknown): Settings {
       radius: clampInt(a.radius, 0, 12, d.appearance.radius),
       fill: clampInt(a.fill, 5, 40, d.appearance.fill),
       highlight: typeof a.highlight === 'boolean' ? a.highlight : d.appearance.highlight,
-      openTabs: typeof a.openTabs === 'boolean' ? a.openTabs : d.appearance.openTabs,
+      outlineColor: a.outlineColor === AUTO ? AUTO : (normalizeHex(a.outlineColor) ?? d.appearance.outlineColor),
+      outlineWidth: clampInt(a.outlineWidth, 1, 4, d.appearance.outlineWidth),
+      outlineOpacity: clampInt(a.outlineOpacity, 20, 100, d.appearance.outlineOpacity),
     },
   };
 }

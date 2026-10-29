@@ -26,6 +26,7 @@
 
     <div class="tabs" role="tablist" aria-label="Sections">
       <button type="button" role="tab" id="tab-chat" aria-controls="panel-chat" aria-selected="true">Conversation</button>
+      <button type="button" role="tab" id="tab-chats" aria-controls="panel-chats" aria-selected="false" tabindex="-1">Chats</button>
       <button type="button" role="tab" id="tab-rules" aria-controls="panel-rules" aria-selected="false" tabindex="-1">Rules</button>
       <button type="button" role="tab" id="tab-style" aria-controls="panel-style" aria-selected="false" tabindex="-1">Style</button>
       <button type="button" role="tab" id="tab-data" aria-controls="panel-data" aria-selected="false" tabindex="-1">Data</button>
@@ -34,6 +35,15 @@
     <main>
       <section role="tabpanel" id="panel-chat" aria-labelledby="tab-chat">
         <div id="current"></div>
+      </section>
+
+      <section role="tabpanel" id="panel-chats" aria-labelledby="tab-chats" hidden>
+        <div class="tester">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5" /><path d="m10.5 10.5 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
+          <input type="text" id="chat-search" placeholder="Search chats in the sidebar…" aria-label="Search chats" autocomplete="off" />
+        </div>
+        <ul id="chat-list" class="chat-list" aria-label="Chats in the sidebar"></ul>
+        <p id="chat-note" class="sub"></p>
       </section>
 
       <section role="tabpanel" id="panel-rules" aria-labelledby="tab-rules" hidden>
@@ -70,18 +80,37 @@
 
       <section role="tabpanel" id="panel-style" aria-labelledby="tab-style" hidden>
         <div class="preview" id="preview" aria-hidden="true"></div>
-        <div class="segmented" role="radiogroup" aria-label="Style">
-          <label><input type="radio" name="mode" value="bar" /><span>Bar</span></label>
-          <label><input type="radio" name="mode" value="fill" /><span>Fill</span></label>
-          <label><input type="radio" name="mode" value="both" /><span>Bar + fill</span></label>
+
+        <div class="group">
+          <p class="eyebrow">Chat color</p>
+          <div class="card sliders">
+            <div class="segmented" role="radiogroup" aria-label="Color style">
+              <label><input type="radio" name="mode" value="bar" /><span>Bar</span></label>
+              <label><input type="radio" name="mode" value="fill" /><span>Fill</span></label>
+              <label><input type="radio" name="mode" value="both" /><span>Bar + fill</span></label>
+            </div>
+            <label class="slider" data-for="bar"><span>Bar width</span><input type="range" id="thickness" min="2" max="6" step="1" /><output id="thickness-v"></output></label>
+            <label class="slider" data-for="bar"><span>Bar opacity</span><input type="range" id="opacity" min="10" max="100" step="5" /><output id="opacity-v"></output></label>
+            <label class="slider" data-for="bar"><span>Bar roundness</span><input type="range" id="radius" min="0" max="12" step="1" /><output id="radius-v"></output></label>
+            <label class="slider" data-for="fill"><span>Fill strength</span><input type="range" id="fill" min="5" max="40" step="1" /><output id="fill-v"></output></label>
+          </div>
         </div>
-        <div class="card sliders">
-          <label class="slider toggle-row"><span>Highlight the open chat</span><span></span><input type="checkbox" id="highlight" class="switch sm" role="switch" /></label>
-          <label class="slider toggle-row"><span>Mark chats open in another tab</span><span></span><input type="checkbox" id="open-tabs" class="switch sm" role="switch" /></label>
-          <label class="slider" data-for="fill"><span>Fill strength</span><input type="range" id="fill" min="5" max="40" step="1" /><output id="fill-v"></output></label>
-          <label class="slider" data-for="bar"><span>Bar width</span><input type="range" id="thickness" min="2" max="6" step="1" /><output id="thickness-v"></output></label>
-          <label class="slider" data-for="bar"><span>Bar opacity</span><input type="range" id="opacity" min="10" max="100" step="5" /><output id="opacity-v"></output></label>
-          <label class="slider" data-for="bar"><span>Bar roundness</span><input type="range" id="radius" min="0" max="12" step="1" /><output id="radius-v"></output></label>
+
+        <div class="group">
+          <p class="eyebrow">Open chat outline</p>
+          <div class="card sliders" id="outline-card">
+            <label class="slider toggle-row"><span>Outline the open chat</span><span></span><input type="checkbox" id="highlight" class="switch sm" role="switch" /></label>
+            <div class="outline-colors" data-for="outline">
+              <div class="swatches" id="outline-swatches" role="group" aria-label="Outline color"></div>
+              <div class="custom">
+                <label class="well"><input type="color" id="outline-picker" aria-label="Custom outline color" /></label>
+                <input type="text" id="outline-hex" class="mono" aria-label="Outline HEX color" spellcheck="false" />
+                <button type="button" id="outline-apply" class="btn">Apply</button>
+              </div>
+            </div>
+            <label class="slider" data-for="outline"><span>Outline width</span><input type="range" id="outlineWidth" min="1" max="4" step="1" /><output id="outlineWidth-v"></output></label>
+            <label class="slider" data-for="outline"><span>Outline opacity</span><input type="range" id="outlineOpacity" min="20" max="100" step="5" /><output id="outlineOpacity-v"></output></label>
+          </div>
         </div>
       </section>
 

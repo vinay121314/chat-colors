@@ -1,7 +1,9 @@
 // Observes the sidebar and keeps row decoration in sync with settings. No chrome.* here (testable).
-import { resolveColor } from '../core/rules';
-import type { Appearance, Settings } from '../core/schema';
+// Purely visual: nothing interactive is injected into ChatGPT's rows. Colors are assigned in the popup.
+import { resolveColor, type Source } from '../core/rules';
+import { AUTO, type Appearance, type Settings } from '../core/schema';
 import {
+  activeRow,
   decorate,
   decorated,
   findGroupRows,
@@ -11,17 +13,12 @@ import {
   kindOf,
   parseChatGroup,
   parseConversationId,
-  parseGroupLink,
   renderFilterBar,
   setActive,
   setHidden,
-  setOpenBadge,
-  activeRow,
   undecorate,
   type Group,
-  type Row,
 } from './adapter';
-import { closePicker, openPicker, type PickTarget } from './picker';
 
 /** A color in use in the sidebar, for the popup's filter chips. */
 export interface LegendEntry {
@@ -30,22 +27,35 @@ export interface LegendEntry {
   count: number;
 }
 
+export interface GroupInfo {
+  key: string;
+  name: string;
+  kind: string;
+}
+
 export interface Current {
   id: string | null;
   title: string | null;
-  group: { key: string; name: string; kind: string } | null;
+  group: GroupInfo | null;
   legend: LegendEntry[];
   filter: string | null;
 }
 
+/** One sidebar conversation for the popup's Chats tab. Sent to the popup on request; never stored. */
+export interface ListEntry {
+  id: string;
+  title: string;
+  color: string | null;
+  source: Source;
+  /** Category or Project/GPT name the color comes from, if any. */
+  label: string | null;
+  group: GroupInfo | null;
+  active: boolean;
+}
+
 export interface Host {
-  /** Apply a settings mutation (persisted by the caller). */
-  write: (fn: (s: Settings) => void) => void;
+  /** Change the sidebar filter (persisted by the caller). */
   setFilter: (color: string | null) => void;
-  /** Ask the worker to switch to the other tab showing this conversation. */
-  focusTab: (id: string) => void;
-  /** Called after every scan (navigation, sidebar changes): lets the caller report presence. */
-  scanned?: () => void;
 }
 
 export function createColorizer(host: Host) {
@@ -59,8 +69,6 @@ export function createColorizer(host: Host) {
   /** Group key -> name as shown in the sidebar (Project / GPT entries), refreshed every scan. */
   let groupNames = new Map<string, string>();
   let legend: LegendEntry[] = [];
-  /** Conversation ids open in OTHER tabs, as last reported by the worker. */
-  let elsewhere = new Set<string>();
   /** Navigation API (verified available live); absent in older engines / jsdom. */
   const nav = (globalThis as { navigation?: EventTarget }).navigation;
 
@@ -98,6 +106,7 @@ export function createColorizer(host: Host) {
   }
 
   const groupName = (g: Group) => groupNames.get(g.key) || s?.groups[g.key]?.name || g.slug || kindOf(g.key);
+  const groupInfo = (g: Group | null): GroupInfo | null => (g ? { key: g.key, name: groupName(g), kind: kindOf(g.key) } : null);
 
   /** Human label for a color: category / Project name, else the hex. */
   function labelFor(color: string): string {
@@ -109,34 +118,6 @@ export function createColorizer(host: Host) {
     return color;
   }
 
-  const open = (btn: HTMLButtonElement, row: Row) => {
-    if (!s) return;
-    const href = row.el.getAttribute('href');
-    const id = parseConversationId(href);
-    const g = id ? parseChatGroup(href) : parseGroupLink(href);
-    const target: PickTarget = {
-      id,
-      title: getTitle(row.el),
-      group: g ? { key: g.key, name: groupName(g), kind: kindOf(g.key) } : null,
-    };
-    openPicker(btn, target, s, (scope, value) => {
-      if (scope === 'chat' && id) {
-        host.write((x) => {
-          if (value === null) delete x.overrides[id];
-          else x.overrides[id] = value;
-        });
-      } else if (scope === 'group' && target.group) {
-        const { key, name } = target.group;
-        host.write((x) => {
-          if (value === null) delete x.groups[key];
-          else x.groups[key] = { color: value, name };
-        });
-      } else if (scope === 'filter') {
-        host.setFilter(value);
-      }
-    });
-  };
-
   function scan(): void {
     if (!running || !s) return;
     if (!root?.isConnected || rowCount === 0) bind();
@@ -146,8 +127,7 @@ export function createColorizer(host: Host) {
     const groupRows = findGroupRows(root);
     groupNames = new Map(groupRows.map((r) => [r.group.key, getTitle(r.el)]));
     for (const r of groupRows) {
-      const title = getTitle(r.el);
-      seen.add(decorate({ el: r.el, id: `group:${r.group.key}` }, s.groups[r.group.key]?.color ?? null, title, open));
+      seen.add(decorate({ el: r.el, id: `group:${r.group.key}` }, s.groups[r.group.key]?.color ?? null));
     }
 
     const rows = findRows(root);
@@ -156,14 +136,12 @@ export function createColorizer(host: Host) {
     const counts = new Map<string, number>();
     let firstBox: Element | null = null;
     for (const row of rows) {
-      const title = getTitle(row.el);
-      const color = resolveColor(row.id, title, s, parseChatGroup(row.el.getAttribute('href'))?.key).color;
-      const box = decorate(row, color, title, open);
+      const color = resolveColor(row.id, getTitle(row.el), s, parseChatGroup(row.el.getAttribute('href'))?.key).color;
+      const box = decorate(row, color);
       firstBox ??= box;
       seen.add(box);
       setHidden(box, filter !== null && color !== filter);
       setActive(box, row === openRow);
-      setOpenBadge(box, s.appearance.openTabs && elsewhere.has(row.id), host.focusTab);
       if (color) counts.set(color, (counts.get(color) ?? 0) + 1);
     }
     legend = [...counts].map(([color, count]) => ({ color, count, label: labelFor(color) })).sort((a, b) => b.count - a.count);
@@ -175,7 +153,6 @@ export function createColorizer(host: Host) {
     );
     // Rows whose href no longer points at a target (recycled nodes) lose our decoration.
     for (const el of decorated(root)) if (!seen.has(el)) undecorate(el);
-    host.scanned?.();
   }
 
   function applyVars(a: Appearance): void {
@@ -184,8 +161,11 @@ export function createColorizer(host: Host) {
       vars.id = 'crc-vars';
       document.head.append(vars);
     }
+    // Outline: 'auto' leaves --crc-oc unset so CSS falls back to the row's own text color.
+    const oc = a.outlineColor === AUTO ? '' : `--crc-oc:${a.outlineColor};`;
     vars.textContent =
-      `:root{--crc-w:${a.thickness}px;--crc-o:${a.opacity / 100};--crc-r:${a.radius}px;--crc-f:${a.fill}%}` +
+      `:root{--crc-w:${a.thickness}px;--crc-o:${a.opacity / 100};--crc-r:${a.radius}px;--crc-f:${a.fill}%;` +
+      `--crc-ow:${a.outlineWidth}px;--crc-oo:${a.outlineOpacity}%;${oc}}` +
       (a.mode === 'bar' ? '.crc-fill{display:none!important}' : '') +
       (a.mode === 'fill' ? '.crc-bar{display:none!important}' : '');
   }
@@ -197,7 +177,6 @@ export function createColorizer(host: Host) {
     bodyObs.disconnect();
     nav?.removeEventListener('currententrychange', schedule);
     removeEventListener('popstate', schedule);
-    closePicker();
     renderFilterBar(null, null, () => {});
     for (const el of decorated(document)) undecorate(el);
     vars?.remove();
@@ -205,6 +184,8 @@ export function createColorizer(host: Host) {
     root = null;
     rowCount = 0;
   }
+
+  const sidebar = () => (root?.isConnected ? root : findRoot());
 
   return {
     update(next: Settings): void {
@@ -224,25 +205,46 @@ export function createColorizer(host: Host) {
       filter = next;
       scan();
     },
-    /** Conversation ids open in other tabs (from the worker). */
-    setElsewhere(ids: string[]): void {
-      elsewhere = new Set(ids);
-      scan();
-    },
     stop,
     /** Conversation in the current URL, with its sidebar title if visible, plus the color legend. */
     current(path: string = location.pathname): Current {
       const id = parseConversationId(path);
-      const r = root?.isConnected ? root : findRoot();
+      const r = sidebar();
       const row = id && r ? findRows(r).find((x) => x.id === id) : undefined;
-      const g = id ? parseChatGroup(path) : null;
       return {
         id,
         title: row ? getTitle(row.el) : null,
-        group: g ? { key: g.key, name: groupName(g), kind: kindOf(g.key) } : null,
+        group: id ? groupInfo(parseChatGroup(path)) : null,
         legend,
         filter,
       };
+    },
+    /** Every conversation loaded in the sidebar, for assigning colors from the popup. */
+    list(path: string = location.pathname): ListEntry[] {
+      const r = sidebar();
+      if (!r || !s) return [];
+      const rows = findRows(r);
+      const open = activeRow(rows, path);
+      const seen = new Set<string>();
+      return rows.flatMap((row) => {
+        if (seen.has(row.id)) return []; // same chat listed twice (e.g. pinned + recent)
+        seen.add(row.id);
+        const title = getTitle(row.el);
+        const g = parseChatGroup(row.el.getAttribute('href'));
+        const res = resolveColor(row.id, title, s!, g?.key);
+        const gi = groupInfo(g);
+        return [
+          {
+            id: row.id,
+            title,
+            color: res.color,
+            source: res.source,
+            label: res.source === 'rule' ? (res.category?.name ?? null) : res.source === 'group' ? (gi?.name ?? null) : null,
+            group: gi,
+            active: row === open,
+          },
+        ];
+      });
     },
   };
 }

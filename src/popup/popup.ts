@@ -1,5 +1,7 @@
 import { matchCategory, resolveColor } from '../core/rules';
+import type { ListEntry } from '../content/colorizer';
 import {
+  AUTO,
   NEUTRAL,
   NONE,
   PALETTE,
@@ -13,9 +15,10 @@ import {
   type Mode,
   type Settings,
 } from '../core/schema';
+import { MSG_CURRENT, MSG_DIAG, MSG_LIST, load, onChange, onFilter, save, saveFilter, update } from '../core/storage';
 
-const SLIDERS = ['fill', 'thickness', 'opacity', 'radius'] as const;
-import { MSG_CURRENT, MSG_DIAG, load, onChange, onFilter, save, saveFilter, update } from '../core/storage';
+const SLIDERS = ['fill', 'thickness', 'opacity', 'radius', 'outlineWidth', 'outlineOpacity'] as const;
+const PERCENT = new Set<string>(['fill', 'opacity', 'outlineOpacity']);
 
 type Current = {
   id: string | null;
@@ -32,6 +35,9 @@ let diag: Diag = null;
 const expanded = new Set<string>();
 /** Conversation tab: color this chat only, or its whole Project/GPT. */
 let scope: 'chat' | 'group' = 'chat';
+/** Chats tab: sidebar conversations (null = not on ChatGPT), the expanded one, and the search text. */
+let chats: ListEntry[] | null = null;
+let openChatId: string | null = null;
 
 const $ = <T extends HTMLElement = HTMLInputElement>(id: string) => document.getElementById(id) as T;
 
@@ -96,6 +102,78 @@ function setOverride(id: string, v: string | null): void {
     if (v === null) delete x.overrides[id];
     else x.overrides[id] = v;
   });
+}
+
+// ------------------------------------------------------------------ Shared color editor
+
+interface EditorOptions {
+  /** Color shown as selected (the manual / Project color), or null. */
+  selected: string | null;
+  /** Initial value for the custom color inputs. */
+  initial: string;
+  /** Prefix for data-key (focus restoration across re-renders). */
+  key: string;
+  pick: (color: string | null) => void;
+  /** "Remove color" (manual none); omitted for Project scope. */
+  remove?: () => void;
+  resetLabel: string;
+}
+
+/** Categories, preset swatches, custom HEX and actions. Used by the Conversation and Chats tabs. */
+function colorEditor(o: EditorOptions): HTMLElement[] {
+  const chips = h(
+    'div',
+    { cls: 'chips' },
+    ...s.categories.map((c) => {
+      const b = btn('', () => o.pick(c.color), { cls: 'chip', key: `${o.key}:cat:${c.id}` });
+      b.append(colorVar(h('i'), c.color), h('span', { textContent: c.name }));
+      b.setAttribute('aria-pressed', String(o.selected === c.color));
+      return b;
+    }),
+  );
+  const swatches = h(
+    'div',
+    { cls: 'swatches' },
+    ...PALETTE.map((c) => {
+      const b = btn('', () => o.pick(c), { cls: 'sw', title: c, label: `Color ${c}`, key: `${o.key}:sw:${c}` });
+      b.setAttribute('aria-pressed', String(o.selected === c));
+      return colorVar(b, c);
+    }),
+  );
+  const picker = h('input', { type: 'color', value: o.initial, label: 'Custom color', key: `${o.key}:picker` });
+  const hex = h('input', { type: 'text', value: o.initial, label: 'Custom HEX color', spellcheck: false, key: `${o.key}:hex`, cls: 'mono' });
+  picker.oninput = () => {
+    hex.value = picker.value;
+    hex.setCustomValidity('');
+  };
+  const applyHex = () => {
+    const v = normalizeHex(hex.value);
+    if (!v) {
+      hex.setCustomValidity('Use #rgb or #rrggbb');
+      hex.reportValidity();
+      return;
+    }
+    o.pick(v);
+  };
+  hex.onkeydown = (e) => {
+    if (e.key === 'Enter') applyHex();
+  };
+  return [
+    ...(s.categories.length ? [h('div', {}, h('p', { cls: 'eyebrow', textContent: 'Categories' }), chips)] : []),
+    h('div', {}, h('p', { cls: 'eyebrow', textContent: 'Colors' }), swatches),
+    h(
+      'div',
+      {},
+      h('p', { cls: 'eyebrow', textContent: 'Custom' }),
+      h('div', { cls: 'custom' }, h('label', { cls: 'well' }, picker), hex, btn('Apply', applyHex, { cls: 'btn primary', key: `${o.key}:apply` })),
+    ),
+    h(
+      'div',
+      { cls: 'actions' },
+      btn(o.resetLabel, () => o.pick(null), { cls: 'btn ghost', key: `${o.key}:reset` }),
+      ...(o.remove ? [btn('Remove color', o.remove, { cls: 'btn ghost', key: `${o.key}:none` })] : []),
+    ),
+  ];
 }
 
 // ------------------------------------------------------------------ Header status
@@ -225,67 +303,18 @@ function renderCurrent(): void {
       )
     : null;
 
-  const chips = h(
-    'div',
-    { cls: 'chips' },
-    ...s.categories.map((c) => {
-      const b = btn('', () => apply(c.color), { cls: 'chip', key: `cur:cat:${c.id}` });
-      b.append(colorVar(h('i'), c.color), h('span', { textContent: c.name }));
-      b.setAttribute('aria-pressed', String(selected === c.color));
-      return b;
-    }),
-  );
-  const swatches = h(
-    'div',
-    { cls: 'swatches' },
-    ...PALETTE.map((c) => {
-      const b = btn('', () => apply(c), { cls: 'sw', title: c, label: `Color ${c}`, key: `cur:sw:${c}` });
-      b.setAttribute('aria-pressed', String(selected === c));
-      return colorVar(b, c);
-    }),
-  );
-
-  const initial = shown ?? PALETTE[1]!;
-  const picker = h('input', { type: 'color', value: initial, label: 'Custom color', key: 'cur:picker' });
-  const hex = h('input', { type: 'text', value: initial, label: 'Custom HEX color', spellcheck: false, key: 'cur:hex', cls: 'mono' });
-  picker.oninput = () => {
-    hex.value = picker.value;
-    hex.setCustomValidity('');
-  };
-  const applyHex = () => {
-    const v = normalizeHex(hex.value);
-    if (!v) {
-      hex.setCustomValidity('Use #rgb or #rrggbb');
-      hex.reportValidity();
-      return;
-    }
-    apply(v);
-  };
-  hex.onkeydown = (e) => {
-    if (e.key === 'Enter') applyHex();
-  };
-
-  const actions =
-    scope === 'group'
-      ? [btn(`Clear ${g!.kind} color`, () => apply(null), { cls: 'btn ghost', key: 'cur:reset' })]
-      : [
-          btn('Reset to automatic', () => apply(null), { cls: 'btn ghost', key: 'cur:reset' }),
-          btn('Remove color', () => setOverride(id, NONE), { cls: 'btn ghost', key: 'cur:none' }),
-        ];
-
   const card = h(
     'div',
     { cls: 'card' },
     ...(scopeSwitch ? [scopeSwitch] : []),
-    ...(s.categories.length ? [h('div', {}, h('p', { cls: 'eyebrow', textContent: 'Categories' }), chips)] : []),
-    h('div', {}, h('p', { cls: 'eyebrow', textContent: 'Colors' }), swatches),
-    h(
-      'div',
-      {},
-      h('p', { cls: 'eyebrow', textContent: 'Custom' }),
-      h('div', { cls: 'custom' }, h('label', { cls: 'well' }, picker), hex, btn('Apply', applyHex, { cls: 'btn primary', key: 'cur:apply' })),
-    ),
-    h('div', { cls: 'actions' }, ...actions),
+    ...colorEditor({
+      selected,
+      initial: shown ?? PALETTE[1]!,
+      key: 'cur',
+      pick: apply,
+      remove: scope === 'group' ? undefined : () => setOverride(id, NONE),
+      resetLabel: scope === 'group' ? `Clear ${g!.kind} color` : 'Reset to automatic',
+    }),
   );
   box.replaceChildren(h('div', { cls: 'card' }, head), card, ...(filterCard ? [filterCard] : []));
 }
@@ -325,6 +354,104 @@ function renderGroups(): void {
       );
     }),
   );
+}
+
+// ------------------------------------------------------------------ Chats tab
+
+/** Every conversation loaded in the sidebar; colors any of them, open or not. */
+function renderChats(): void {
+  const list = $('chat-list');
+  const note = $('chat-note');
+  if (!chats) {
+    list.replaceChildren();
+    note.textContent = 'Open chatgpt.com in this tab to list the chats in its sidebar.';
+    return;
+  }
+  const q = $('chat-search').value.trim().toLocaleLowerCase();
+  const shown = q ? chats.filter((c) => c.title.toLocaleLowerCase().includes(q)) : chats;
+  note.textContent = q
+    ? `${shown.length} of ${chats.length} chats match.`
+    : `${chats.length} chats loaded in the sidebar. Scroll the sidebar to load older ones.`;
+  list.replaceChildren(
+    ...shown.map((c) => {
+      // Recomputed from current settings so the list updates instantly after a change.
+      const r = resolveColor(c.id, c.title, s, c.group?.key);
+      const meta =
+        r.source === 'manual'
+          ? r.color
+            ? 'Manual'
+            : 'No color'
+          : r.source === 'group'
+            ? (c.group?.name ?? 'Project')
+            : r.source === 'rule'
+              ? (r.category?.name ?? '')
+              : '';
+      const open = openChatId === c.id;
+      const row = h(
+        'button',
+        { type: 'button', cls: 'chat-row', key: `chat:${c.id}` },
+        colorVar(h('i', { cls: r.color ? 'dot' : 'dot none' }), r.color),
+        h('span', { cls: 'chat-title', textContent: c.title || 'Untitled' }),
+        ...(c.active ? [h('span', { cls: 'tag', textContent: 'Open' })] : []),
+        h('span', { cls: 'chat-meta', textContent: meta }),
+      );
+      row.setAttribute('aria-expanded', String(open));
+      row.onclick = () => {
+        openChatId = open ? null : c.id;
+        render();
+      };
+      const li = h('li', { cls: open ? 'chat open' : 'chat' }, row);
+      if (open) {
+        li.append(
+          h(
+            'div',
+            { cls: 'chat-editor' },
+            ...colorEditor({
+              selected: r.source === 'manual' ? r.color : null,
+              initial: r.color ?? PALETTE[1]!,
+              key: `chat:${c.id}`,
+              pick: (v) => setOverride(c.id, v),
+              remove: () => setOverride(c.id, NONE),
+              resetLabel: 'Reset to automatic',
+            }),
+          ),
+        );
+      }
+      return li;
+    }),
+  );
+}
+
+// ------------------------------------------------------------------ Style tab: outline
+
+function renderOutline(): void {
+  const a = s.appearance;
+  const sel = a.outlineColor;
+  const auto = btn('', () => commit((x) => (x.appearance.outlineColor = AUTO)), {
+    cls: 'sw auto',
+    title: 'Auto: text color',
+    label: 'Auto outline color (text color)',
+    key: 'ol:auto',
+  });
+  auto.setAttribute('aria-pressed', String(sel === AUTO));
+  $('outline-swatches').replaceChildren(
+    auto,
+    ...PALETTE.slice(0, 7).map((c) => {
+      const b = btn('', () => commit((x) => (x.appearance.outlineColor = c)), {
+        cls: 'sw',
+        title: c,
+        label: `Outline ${c}`,
+        key: `ol:${c}`,
+      });
+      b.setAttribute('aria-pressed', String(sel === c));
+      return colorVar(b, c);
+    }),
+  );
+  const hex = $('outline-hex');
+  if (document.activeElement !== hex) hex.value = sel === AUTO ? '' : sel;
+  hex.placeholder = 'Auto';
+  $('outline-picker').value = sel === AUTO ? '#71717a' : sel;
+  $('outline-card').classList.toggle('outline-off', !a.highlight);
 }
 
 // ------------------------------------------------------------------ Rules tab
@@ -486,16 +613,20 @@ function renderPreview(): void {
     ['Hello there', s.fallback === NONE ? null : s.fallback, false],
   ];
   const p = $('preview');
-  p.style.cssText = `--w:${a.thickness}px;--o:${a.opacity / 100};--rad:${a.radius}px;--f:${a.fill}%`;
+  p.style.cssText =
+    `--w:${a.thickness}px;--o:${a.opacity / 100};--rad:${a.radius}px;--f:${a.fill}%;` +
+    `--ow:${a.outlineWidth}px;--oo:${a.outlineOpacity}%;${a.outlineColor === AUTO ? '' : `--oc:${a.outlineColor};`}`;
   p.dataset.mode = a.mode;
+  p.dataset.outline = a.highlight ? 'on' : 'off';
   p.replaceChildren(
     h('p', { cls: 'p-label', textContent: 'Preview' }),
     ...rows.map(([t, c, sel]) =>
       colorVar(h('div', { cls: sel ? 'p-row sel' : 'p-row' }, ...(c ? [h('i'), h('b')] : []), h('span', { textContent: t })), c),
     ),
   );
-  for (const el of document.querySelectorAll<HTMLElement>('.slider[data-for]')) {
-    el.classList.toggle('off', a.mode !== 'both' && a.mode !== el.dataset.for);
+  for (const el of document.querySelectorAll<HTMLElement>('[data-for]')) {
+    const f = el.dataset.for;
+    el.classList.toggle('off', f === 'outline' ? !a.highlight : a.mode !== 'both' && a.mode !== f);
   }
 }
 
@@ -518,17 +649,18 @@ function render(): void {
   const focusKey = (document.activeElement as HTMLElement | null)?.dataset.key;
   $('enabled').checked = s.enabled;
   $('highlight').checked = s.appearance.highlight;
-  $('open-tabs').checked = s.appearance.openTabs;
   document.body.classList.toggle('disabled', !s.enabled);
   $('fallback').value = s.fallback === NONE ? NEUTRAL : s.fallback;
   $('fallback-on').checked = s.fallback !== NONE;
   for (const k of SLIDERS) {
     $(k).value = String(s.appearance[k]);
-    $(`${k}-v`).textContent = `${s.appearance[k]}${k === 'opacity' || k === 'fill' ? '%' : 'px'}`;
+    $(`${k}-v`).textContent = `${s.appearance[k]}${PERCENT.has(k) ? '%' : 'px'}`;
   }
   for (const r of document.querySelectorAll<HTMLInputElement>('input[name="mode"]')) r.checked = r.value === s.appearance.mode;
   renderStatus();
   renderCurrent();
+  renderChats();
+  renderOutline();
   renderGroups();
   renderCategories();
   renderTest();
@@ -577,7 +709,27 @@ function wire(): void {
   $('version').textContent = chrome.runtime.getManifest().version;
   $('enabled').onchange = () => commit((x) => (x.enabled = $('enabled').checked));
   $('highlight').onchange = () => commit((x) => (x.appearance.highlight = $('highlight').checked));
-  $('open-tabs').onchange = () => commit((x) => (x.appearance.openTabs = $('open-tabs').checked));
+  $('chat-search').oninput = renderChats;
+  const applyOutlineHex = () => {
+    const hex = $('outline-hex');
+    const v = hex.value.trim() === '' ? AUTO : normalizeHex(hex.value);
+    if (!v) {
+      hex.setCustomValidity('Use #rgb or #rrggbb, or leave empty for Auto');
+      hex.reportValidity();
+      return;
+    }
+    hex.setCustomValidity('');
+    commit((x) => (x.appearance.outlineColor = v));
+  };
+  $('outline-apply').onclick = applyOutlineHex;
+  $('outline-hex').onkeydown = (e) => {
+    if (e.key === 'Enter') applyOutlineHex();
+  };
+  $('outline-picker').oninput = () => {
+    $('outline-hex').value = $('outline-picker').value;
+    $('outline-hex').setCustomValidity('');
+  };
+  $('outline-picker').onchange = () => commit((x) => (x.appearance.outlineColor = $('outline-picker').value));
   $('add-cat').onclick = () => {
     const id = newId();
     const color = PALETTE[s.categories.length % PALETTE.length]!;
@@ -646,13 +798,20 @@ function wire(): void {
 }
 
 async function init(): Promise<void> {
-  [s, current, diag] = await Promise.all([load(), ask<Current>(MSG_CURRENT), ask<Diag>(MSG_DIAG)]);
+  [s, current, diag, chats] = await Promise.all([
+    load(),
+    ask<Current>(MSG_CURRENT),
+    ask<Diag>(MSG_DIAG),
+    ask<ListEntry[]>(MSG_LIST),
+  ]);
   wire();
   render();
   onChange(async (next) => {
-    if (JSON.stringify(next) === JSON.stringify(s)) return; // our own echo
+    // Refresh what the page reports (colors in use, titles) after any change, ours or another tab's.
+    [current, chats] = await Promise.all([ask<Current>(MSG_CURRENT), ask<ListEntry[]>(MSG_LIST)]).then(
+      ([c, l]) => [c ?? current, l ?? chats] as const,
+    );
     s = next;
-    current = (await ask<Current>(MSG_CURRENT)) ?? current; // colors in use may have changed
     render();
   });
   onFilter(async (f) => {

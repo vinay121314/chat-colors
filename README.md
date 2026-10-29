@@ -4,22 +4,21 @@ A small Chrome extension (Manifest V3) that adds colored left borders to convers
 
 > **Live ChatGPT compatibility: see [QA status](#qa-status).** Automated tests run against fixture pages, not the live site.
 
-| In-page picker (dark) | Popup: conversation | Popup: rules |
+| Sidebar (fixture) | Popup: Chats | Popup: Style |
 |---|---|---|
-| ![](docs/screenshots/picker-dark.png) | ![](docs/screenshots/popup-conversation-light.png) | ![](docs/screenshots/popup-rules-dark.png) |
+| ![](docs/screenshots/fixture-sidebar-light.png) | ![](docs/screenshots/popup-chats-light.png) | ![](docs/screenshots/popup-style-dark.png) |
 
 *Screenshots are from the test fixture page with synthetic titles, captured by the Playwright suite. They are not screenshots of chatgpt.com.*
 
 ## Features
 
-- **Manual colors per conversation.** Use the small dot that appears on hover or keyboard focus in each sidebar row, or the popup for the open conversation. There are 8+ palette colors, a custom HEX value, *Reset to automatic*, and *Remove color*.
+- **Manual colors for any conversation, from the popup.** The *Chats* tab lists every chat loaded in the sidebar, open or not, with search. The *Conversation* tab handles the chat that's open. You get the category colors, 8 presets, any custom HEX, *Reset to automatic*, and *Remove color*. Nothing is added to ChatGPT's rows: no buttons and no extra icons, and its three-dot menu is untouched.
 - **Nothing is colored by default.** Out of the box the extension only adds the color control. Chats are colored when you choose a color, or when you add keyword rules.
 - **Optional automatic categories.** The starter categories (Work, Development, AI Tools, Personal, Urgent, Research) begin as named colors without keywords. Add your own keywords, or click *Load suggested keywords* on the Rules tab. You can create, rename, delete, recolor and reorder categories. Keywords are case-insensitive and can be toggled one at a time, *Test a title* previews which category matches, and *Uncategorized* can optionally get its own color.
 - **Precedence:** a manual color first, then the first matching enabled rule in priority order, then the fallback color.
 - **Stable IDs.** Colors are keyed by the conversation UUID from the URL, including Project and custom-GPT chats, so renaming a chat keeps its manual color while automatic colors update.
-- **Appearance:** *Bar*, *Fill* (a tinted row background), or *Bar + fill* (the default), with fill strength, bar width, opacity and roundness, plus a live preview and a global on/off switch. The color is drawn by the extension's own overlay elements on the whole row, so there's no layout shift and ChatGPT's row styles are never changed. Respects `prefers-reduced-motion`.
-- **Open-chat highlight:** the conversation open in the tab gets a subtle outline that follows you as you switch chats (including Back/Forward) and keeps its own color. It uses ChatGPT's own `aria-current` marker, falling back to the URL. You can turn it off under *Style*.
-- **Already open in another tab:** chats that are open in another ChatGPT tab show a small two-window badge. Clicking it switches to that tab, in any window, instead of opening a duplicate. Clicking the row itself still behaves normally. No extra permissions are needed; a background worker tracks only conversation IDs per tab, for the session. You can turn it off under *Style*.
+- **Appearance:** *Bar* (the default: a slim left bar, no background), *Fill* (a tinted row background), or *Bar + fill*, with bar width, opacity and roundness and fill strength, plus a live preview and a global on/off switch. The color is drawn by the extension's own overlay elements on the whole row, so there's no layout shift and ChatGPT's row styles are never changed. Respects `prefers-reduced-motion`.
+- **Open-chat outline:** the conversation open in the tab gets a subtle inset outline that follows you as you switch chats (including Back/Forward) and keeps its own color. Its color (Auto, presets or HEX), width and opacity are configurable and it can be turned off. Windows high-contrast mode uses the system highlight color. It uses ChatGPT's own `aria-current` marker, falling back to the URL.
 - **Troubleshooting:** the popup's header shows how many chats were detected. *Data → Copy diagnostics* produces a structure-only report (no titles, ids masked) for bug reports.
 - **Import/export** settings as JSON, with validation.
 - **Private by design:** only the `storage` permission, runs only on `chatgpt.com`, no network requests. See [PRIVACY.md](PRIVACY.md).
@@ -40,7 +39,8 @@ Requires Chrome 114 or later. After rebuilding, click the reload icon on the ext
 
 ## Usage
 
-- **Color one chat:** hover a sidebar conversation, or Tab to it, then click the small dot near the right edge and pick a category, a color, or a custom HEX. Clicking the dot never opens the chat.
+- **Color any chat:** open the popup, go to *Chats*, search or scroll, click a chat, and pick a category, a preset, or a custom HEX. It works for chats that aren't open. For the open chat, the *Conversation* tab does the same, and inside a Project you can switch between *This chat* and *All in Project*.
+- **Open-chat outline:** *Style → Open chat outline*. Turn it on or off, pick *Auto* (the sidebar's text color), a preset or any HEX, and set its width and opacity.
 - **Popup → Conversation:** colors the conversation open in the current tab.
 - **Popup → Rules:** expand a category to rename it, add keywords (comma-separated, Enter to add), click a keyword chip to toggle it, or use ↑/↓ to change priority. *Test a title* previews the match. *Uncategorized* sets the fallback color or turns its border off.
 - **Popup → Style:** sliders apply live to every open ChatGPT tab.
@@ -57,7 +57,8 @@ The extension reads only sidebar conversation links and their visible titles. It
 - ChatGPT is a third-party app whose markup can change at any time. All selectors live in [`src/content/adapter.ts`](src/content/adapter.ts). If they stop matching, the extension does nothing rather than breaking the page.
 - Rules match only titles **visible in the sidebar**. Conversations that haven't been loaded by scrolling yet aren't classified until they appear.
 - When the sidebar is collapsed (or on mobile layouts), there are no rows to color. The popup still works for the open conversation.
-- The in-row control's position is chosen so it clears ChatGPT's own row menu. That offset is tuned for the fixture and may need adjusting on the live site.
+- The *Chats* tab lists only chats ChatGPT has loaded into the sidebar. Scroll the sidebar to load older ones.
+- Colors are set in the popup, not from ChatGPT's own three-dot menu. Adding an item there was judged too fragile without verified access to that menu's markup.
 - There is no extension icon yet, so Chrome shows a default letter icon.
 
 ## Development

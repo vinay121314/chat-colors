@@ -5,8 +5,8 @@ const r = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 
 // Two passes (see package.json "build"): content scripts can't be ES modules, so the
 // content entry is a single IIFE; the popup is a normal HTML entry. public/ (manifest, CSS) is copied as-is.
-// Classic (IIFE) scripts: the content script, and the background service worker.
-const SCRIPTS: Record<string, string> = { content: 'src/content/main.ts', background: 'src/background/main.ts' };
+// Classic (IIFE) script: the content script.
+const SCRIPTS: Record<string, string> = { content: 'src/content/main.ts' };
 
 export default defineConfig(({ mode }) =>
   mode in SCRIPTS
