@@ -57,6 +57,14 @@ Layering: `core` knows nothing about the DOM or ChatGPT. `adapter` knows nothing
 
 `migrate()` turns anything into valid settings: bad fields fall back to defaults, bad entries are dropped, and fields from removed features (such as `openTabs`) are discarded. Data from a newer version is refused and never overwritten. The v1 → v2 migration removed only the old default keywords and default grey fallback.
 
+## Phase 1 additions (schema v3)
+
+- **Provider-namespaced keys:** `chatKey(id, provider)` → `chatgpt:<id>` (`claude:<id>` is reserved). All new per-conversation data uses these keys, so future ChatGPT and Claude adapters can share one store, and a future sync can merge stores without collisions. *Legacy:* `overrides` and `groups` still use bare ChatGPT IDs. A future migration can move them under namespaced keys if a second adapter needs it.
+- **Working Set (`settings.chats`):** `{ [chatKey]: { status: 'active'|'hold'|'done'|null, updatedAt } }`. Unassigned is a timestamped `null` (a tombstone) rather than a deletion, so last-writer-wins sync can tell "cleared later" from "never set". Bulk changes share one timestamp. Status appears only in the popup and in the sidebar filter (`status:<s|none>`); rows get no new elements.
+- **Recently revisited (`crc:visits`, `core/visits.ts`):** device-local `{ [chatKey]: { first, last, count } }`, at most 500 entries and 90 days, never exported. The colorizer calls `host.opened(id)` only when the open conversation changes, not on rescans, and `main.ts` records it only while `settings.history.enabled` is on.
+- **Presenter Mode (`settings.presenter`):** CSS only, generated into `#crc-vars`: `[data-crc] a { filter: blur(n) }` or `-webkit-text-security: disc`, with an optional `:hover`/`:focus-within` reveal and reduced-motion support. The shortcut is a capture-phase `keydown` listener in the content script. `matchesShortcut()` requires the exact modifiers, and only that combination is consumed. There's no background worker, so the shortcut works only while a ChatGPT tab has focus.
+- **Popup:** the Chats tab adds views, selection (`Set` of IDs, pruned to the loaded list), a bulk bar, and statuses in the inline editor. The Conversation tab adds a status control and status filter chips. Style adds a Presenter card; Data adds a history card. The header eye button toggles Presenter Mode.
+
 ## When ChatGPT changes its DOM
 
 Root discovery (`findRoot`):

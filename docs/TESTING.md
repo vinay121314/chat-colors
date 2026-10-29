@@ -33,6 +33,11 @@ Two fixture pages, both shared through `tests/e2e/harness.ts`:
 | Coloring any sidebar chat from the popup (`list()`, Chats tab, search, keyboard) | `colorizer.test.ts`, e2e "Chats tab" ×2 |
 | No interactive element injected; native three-dot menu on top in all modes; link navigates | `adapter.test.ts`, `colorizer.test.ts`, live-structure e2e |
 | Open-chat outline: follows navigation and Back/Forward; color/HEX/width/opacity/Auto/off; invalid HEX | `adapter.test.ts`, `colorizer.test.ts`, `schema.test.ts`, live-structure e2e |
+| Bulk selection and assignment (color/category/HEX/remove, select all visible, clear) | e2e `phase1.spec.ts` "bulk" |
+| Working Set: namespaced keys, statuses with `updatedAt`, Unassigned as a tombstone, views, sidebar status filter | `schema.test.ts`, `colorizer.test.ts`, `storage.test.ts`, e2e "Working Set" |
+| Recently revisited: bounded, ids + timestamps only, once per navigation, history switch, clear | `visits.test.ts`, `colorizer.test.ts`, `storage.test.ts`, e2e "Recently Revisited" |
+| Presenter Mode: blur/dots, reveal, exact shortcut, keys pass through, popup concealment | `schema.test.ts`, `colorizer.test.ts`, e2e "Presenter Mode" |
+| Sidebar minimal in every new state | e2e "sidebar stays minimal" |
 | Keyword matching (case-insensitive, multi-keyword) and rule priority | `rules.test.ts`, e2e "popup" |
 | Title changes (`textContent` and `characterData`) | `colorizer.test.ts`, e2e "Chats tab" |
 | Title extraction ignores row buttons | `adapter.test.ts` |

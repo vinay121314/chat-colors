@@ -18,6 +18,10 @@ A small Chrome extension (Manifest V3) that adds colored left borders to convers
 - **Precedence:** a manual color first, then the first matching enabled rule in priority order, then the fallback color.
 - **Stable IDs.** Colors are keyed by the conversation UUID from the URL, including Project and custom-GPT chats, so renaming a chat keeps its manual color while automatic colors update.
 - **Appearance:** *Bar* (the default: a slim left bar, no background), *Fill* (a tinted row background), or *Bar + fill*, with bar width, opacity and roundness and fill strength, plus a live preview and a global on/off switch. The color is drawn by the extension's own overlay elements on the whole row, so there's no layout shift and ChatGPT's row styles are never changed. Respects `prefers-reduced-motion`.
+- **Bulk assignment (Chats tab):** search, select chats with checkboxes, *Select all visible*, *Clear selection*, then set a category color, a preset, any HEX, Reset or Remove for all of them at once.
+- **Working Set:** mark chats *Active*, *On hold* or *Completed* (or leave them *Unassigned*), one at a time or in bulk. View chats by status in the popup, or filter the ChatGPT sidebar by status (*Conversation → Show in sidebar → By working set*). Statuses never add anything to the sidebar rows.
+- **Recently revisited:** a popup view of chats you've opened at least twice, most recent first, with visit count and time. Only conversation IDs and timestamps are stored, on this device only. You can turn it off or clear it under *Data*.
+- **Presenter Mode:** hides chat titles in the sidebar (and in the popup) by blurring them or showing dots, while colors, the outline and filters stay visible. Optionally a title shows temporarily on hover or keyboard focus. Toggle it with the eye button in the popup header or the shortcut (default *Alt+Shift+P*, configurable or off), which works while a ChatGPT tab has focus.
 - **Open-chat outline:** the conversation open in the tab gets a subtle inset outline that follows you as you switch chats (including Back/Forward) and keeps its own color. Its color (Auto, presets or HEX), width and opacity are configurable and it can be turned off. Windows high-contrast mode uses the system highlight color. It uses ChatGPT's own `aria-current` marker, falling back to the URL.
 - **Troubleshooting:** the popup's header shows how many chats were detected. *Data → Copy diagnostics* produces a structure-only report (no titles, ids masked) for bug reports.
 - **Import/export** settings as JSON, with validation.
@@ -57,7 +61,9 @@ The extension reads only sidebar conversation links and their visible titles. It
 - ChatGPT is a third-party app whose markup can change at any time. All selectors live in [`src/content/adapter.ts`](src/content/adapter.ts). If they stop matching, the extension does nothing rather than breaking the page.
 - Rules match only titles **visible in the sidebar**. Conversations that haven't been loaded by scrolling yet aren't classified until they appear.
 - When the sidebar is collapsed (or on mobile layouts), there are no rows to color. The popup still works for the open conversation.
-- The *Chats* tab lists only chats ChatGPT has loaded into the sidebar. Scroll the sidebar to load older ones.
+- The *Chats* tab, bulk actions and the *Recently revisited* view only cover chats ChatGPT has loaded into the sidebar. Scroll the sidebar to load older ones. Revisited chats that aren't loaded are counted but not listed, because titles are never stored.
+- Presenter Mode conceals sidebar rows the extension recognizes. It doesn't hide the conversation title ChatGPT shows in the browser tab or in the page header. The shortcut only works while a ChatGPT tab has focus; a global shortcut would need a background worker, which the extension doesn't have.
+- Recently revisited counts visits only while the extension is installed and enabled, per browser profile.
 - Colors are set in the popup, not from ChatGPT's own three-dot menu. Adding an item there was judged too fragile without verified access to that menu's markup.
 - There is no extension icon yet, so Chrome shows a default letter icon.
 

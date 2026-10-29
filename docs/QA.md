@@ -1,4 +1,32 @@
-# QA report — v1.0.0 (2026-10-29, revision 3: simplified sidebar)
+# QA report — v1.0.0
+
+## Phase 1 (2026-10-29): bulk assignment, Working Set, Recently Revisited, Presenter Mode
+
+Baseline checked first: HEAD was `915736e`, the tree was clean, and none of the Phase 1 features existed. Before any change, 125 unit and 28 e2e tests passed.
+
+| Check | Result |
+|---|---|
+| Lint, typecheck (strict), production build | ✅ pass. Permissions are still `["storage"]` only; no background worker. |
+| Unit (Vitest) | ✅ **141/141** (+16: schema v3, keys, statuses, shortcut matching, visits, status filter, visit reporting, Presenter CSS) |
+| Browser (Playwright, built extension in Chromium) | ✅ **33/33** (+5 in `phase1.spec.ts` on the verified live-structure fixture; the existing suites still pass) |
+
+**Fixture-tested (not yet verified on live chatgpt.com):**
+- **Bulk:** multi-select, *Select all visible* with search, *Clear selection*, and bulk category, preset, HEX and Remove; unselected chats aren't touched.
+- **Working Set:** bulk and per-chat statuses, all stored with `chatgpt:` keys and `updatedAt` (a bulk change shares one timestamp). Unassigned is a timestamped `null`. Status views in the popup; sidebar status filter and pill.
+- **Recently revisited:** recorded on SPA navigation (IDs, timestamps and counts only; no titles in the store; not in exported settings). Lists chats opened 2+ times, most recent first. The history switch stops recording; *Clear history* works.
+- **Presenter Mode:**
+  - the shortcut toggles it; blur and dots both work; reveal on hover, and reveal off
+  - the shortcut can be changed or turned off, and the old one stops working
+  - only the exact combination is consumed (other keys reach the page)
+  - colors and the open-chat outline stay visible; popup titles are concealed too; the header toggle works
+- **Minimal sidebar:** in every new state each row contains only ChatGPT's own link and menu plus our hidden bar and fill. The native menu is the topmost element at its center.
+- **Existing behaviour unchanged:** colors, rules, color filter, outline, Projects, import/export and multi-tab.
+
+**Live chatgpt.com:** Phase 1 is **not yet verified live**. The structures it relies on (root, row wrapper, `aria-current`, Navigation API) were verified earlier. Project and custom-GPT chats are still unverified.
+
+---
+
+# Earlier revision 3 (2026-10-29): simplified sidebar
 
 ## Automated results
 
