@@ -30,6 +30,8 @@ export interface Appearance {
   opacity: number; // %, 10–100 (bar)
   radius: number; // px, 0–12 (bar)
   fill: number; // %, 5–40 (fill tint strength)
+  /** Outline the conversation open in this tab (independent of its color). */
+  highlight: boolean;
 }
 
 /** A color for every chat inside a Project or custom GPT. */
@@ -111,7 +113,7 @@ export function defaultSettings(): Settings {
       cat('research', 'Research', '#0e9fb3'),
     ],
     fallback: NONE,
-    appearance: { mode: 'both', thickness: 4, opacity: 100, radius: 6, fill: 16 },
+    appearance: { mode: 'both', thickness: 4, opacity: 100, radius: 6, fill: 16, highlight: true },
   };
 }
 
@@ -204,6 +206,7 @@ export function migrate(raw: unknown): Settings {
       opacity: clampInt(a.opacity, 10, 100, d.appearance.opacity),
       radius: clampInt(a.radius, 0, 12, d.appearance.radius),
       fill: clampInt(a.fill, 5, 40, d.appearance.fill),
+      highlight: typeof a.highlight === 'boolean' ? a.highlight : d.appearance.highlight,
     },
   };
 }

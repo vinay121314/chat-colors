@@ -13,7 +13,9 @@ import {
   parseConversationId,
   parseGroupLink,
   renderFilterBar,
+  setActive,
   setHidden,
+  activeRow,
   undecorate,
   type Group,
   type Row,
@@ -52,6 +54,8 @@ export function createColorizer(host: Host) {
   /** Group key -> name as shown in the sidebar (Project / GPT entries), refreshed every scan. */
   let groupNames = new Map<string, string>();
   let legend: LegendEntry[] = [];
+  /** Navigation API (verified available live); absent in older engines / jsdom. */
+  const nav = (globalThis as { navigation?: EventTarget }).navigation;
 
   // Narrow observer: the sidebar only. Title edits (characterData), new/removed rows, recycled hrefs.
   const sidebarObs = new MutationObserver(schedule);
@@ -81,7 +85,7 @@ export function createColorizer(host: Host) {
         subtree: true,
         characterData: true,
         attributes: true,
-        attributeFilter: ['href'],
+        attributeFilter: ['href', 'aria-current'], // aria-current: ChatGPT moving the "open chat" marker
       });
     }
   }
@@ -140,6 +144,7 @@ export function createColorizer(host: Host) {
     }
 
     const rows = findRows(root);
+    const openRow = s.appearance.highlight ? activeRow(rows) : undefined;
     rowCount = rows.length;
     const counts = new Map<string, number>();
     let firstBox: Element | null = null;
@@ -150,6 +155,7 @@ export function createColorizer(host: Host) {
       firstBox ??= box;
       seen.add(box);
       setHidden(box, filter !== null && color !== filter);
+      setActive(box, row === openRow);
       if (color) counts.set(color, (counts.get(color) ?? 0) + 1);
     }
     legend = [...counts].map(([color, count]) => ({ color, count, label: labelFor(color) })).sort((a, b) => b.count - a.count);
@@ -180,6 +186,8 @@ export function createColorizer(host: Host) {
     pending = false;
     sidebarObs.disconnect();
     bodyObs.disconnect();
+    nav?.removeEventListener('currententrychange', schedule);
+    removeEventListener('popstate', schedule);
     closePicker();
     renderFilterBar(null, null, () => {});
     for (const el of decorated(document)) undecorate(el);
@@ -197,6 +205,9 @@ export function createColorizer(host: Host) {
       if (!running) {
         running = true;
         bodyObs.observe(document.body, { childList: true, subtree: true });
+        // SPA navigation (verified: Navigation API available live). aria-current mutations also trigger.
+        nav?.addEventListener('currententrychange', schedule);
+        addEventListener('popstate', schedule);
       }
       scan();
     },

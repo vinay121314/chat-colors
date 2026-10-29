@@ -430,6 +430,8 @@ input.mono { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; }
 .segmented input:checked + span { background: var(--bg); color: var(--fg); box-shadow: 0 1px 2px rgb(0 0 0 / 0.08), 0 0 0 1px var(--line); }
 .segmented input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 1px; }
 .sliders .slider.off { opacity: 0.4; }
+.slider.toggle-row input { justify-self: end; }
+.sliders .toggle-row { padding-bottom: 10px; border-bottom: 1px solid var(--line); }
 .sliders { gap: 12px; }
 .slider { display: grid; grid-template-columns: 96px 1fr 44px; align-items: center; gap: 10px; font-size: 12.5px; }
 .slider output { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }

@@ -300,6 +300,7 @@ export function undecorate(el: Element): void {
   positioned.delete(el);
   (el as HTMLElement).style?.removeProperty('--crc-c');
   el.removeAttribute(HIDDEN_ATTR);
+  el.removeAttribute(ACTIVE_ATTR);
   child(el, BTN_CLASS)?.remove();
   child(el, BAR_CLASS)?.remove();
   child(el, FILL_CLASS)?.remove();
@@ -309,6 +310,12 @@ export function undecorate(el: Element): void {
 // Filter: hide non-matching rows (CSS on our own attribute) and show a sticky "Showing …" pill.
 
 const HIDDEN_ATTR = 'data-crc-hidden';
+const ACTIVE_ATTR = 'data-crc-active';
+
+/** Marks the row of the conversation open in this tab (outlined by content.css). */
+export function setActive(el: Element, on: boolean): void {
+  if (el.hasAttribute(ACTIVE_ATTR) !== on) el.toggleAttribute(ACTIVE_ATTR, on);
+}
 
 export function setHidden(el: Element, hidden: boolean): void {
   if (el.hasAttribute(HIDDEN_ATTR) !== hidden) el.toggleAttribute(HIDDEN_ATTR, hidden);

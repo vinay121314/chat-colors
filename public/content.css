@@ -96,6 +96,20 @@
   outline-offset: 1px !important;
 }
 
+/*
+ * Open conversation: an inset outline in the text color (contrasts in light and dark themes).
+ * Outlines take no layout space and are drawn over the fill, so the assigned color stays visible.
+ */
+[data-crc-active] {
+  outline: 2px solid color-mix(in srgb, currentColor 65%, transparent) !important;
+  outline-offset: -2px !important;
+}
+@media (forced-colors: active) {
+  [data-crc-active] {
+    outline-color: Highlight !important;
+  }
+}
+
 /* Filter: rows that don't match the chosen color are hidden; a sticky pill says so. */
 [data-crc-hidden] {
   display: none !important;

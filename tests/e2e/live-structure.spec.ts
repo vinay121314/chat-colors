@@ -1,7 +1,7 @@
 // Regression suite for the VERIFIED logged-in sidebar structure (see tests/fixtures/chatgpt-live.html).
 // Still a fixture: proves behaviour against the reported DOM shape, not against chatgpt.com itself.
 import type { BrowserContext, Page } from '@playwright/test';
-import { expect, test } from './harness';
+import { SHOTS, expect, test } from './harness';
 
 test.use({ fixturePage: 'tests/fixtures/chatgpt-live.html' });
 
@@ -82,4 +82,48 @@ test('bar is drawn at the listitem edge, before the title text', async ({ contex
   });
   expect(g.barR).toBeLessThanOrEqual(g.textL);
   expect(g.barH).toBeGreaterThan(g.rowH * 0.5);
+});
+
+
+// ---------------------------------------------------------------- Feature 5: open-chat highlight
+
+const outlined = (p: Page) =>
+  p.locator(`${ROOT} [data-crc-active]`).evaluateAll((els) =>
+    els.map((e) => ({ id: e.getAttribute('data-crc'), outline: getComputedStyle(e).outlineStyle + ' ' + getComputedStyle(e).outlineWidth })),
+  );
+
+test('highlights the open chat, keeps its color, and follows SPA navigation and back/forward', async ({ context }) => {
+  const p = await openChat(context, `/c/${ID.meeting}`);
+  await expect.poll(() => outlined(p)).toEqual([{ id: ID.meeting, outline: 'solid 2px' }]);
+  await expect(item(p, ID.meeting).locator(':scope > .crc-bar')).toHaveCount(1); // color preserved
+  for (const scheme of ['light', 'dark'] as const) {
+    await p.emulateMedia({ colorScheme: scheme });
+    await p.locator(ROOT).screenshot({ path: `${SHOTS}/highlight-${scheme}.png` });
+  }
+
+  await item(p, ID.ts).locator('a').click(); // SPA navigation, ChatGPT moves aria-current
+  await expect.poll(() => outlined(p)).toEqual([{ id: ID.ts, outline: 'solid 2px' }]);
+
+  await p.goBack(); // popstate
+  await expect.poll(() => outlined(p)).toEqual([{ id: ID.meeting, outline: 'solid 2px' }]);
+  await p.goForward();
+  await expect.poll(() => outlined(p)).toEqual([{ id: ID.ts, outline: 'solid 2px' }]);
+});
+
+test('highlight shows on an uncolored chat too, and can be switched off independently', async ({ context, extId }) => {
+  const popup = await context.newPage();
+  await popup.goto(`chrome-extension://${extId}/popup.html`);
+  await popup.evaluate(async () => {
+    const s = (await chrome.storage.local.get('crc:settings'))['crc:settings'] as Record<string, unknown>;
+    await chrome.storage.local.set({ 'crc:settings': { ...s, fallback: 'none' } });
+  });
+  const p = await openChat(context, `/c/${ID.plain}`);
+  await expect(item(p, ID.plain).locator(':scope > .crc-bar')).toHaveCount(0); // uncolored
+  await expect.poll(() => outlined(p)).toEqual([{ id: ID.plain, outline: 'solid 2px' }]);
+
+  await popup.bringToFront();
+  await popup.getByRole('tab', { name: 'Style' }).click();
+  await popup.getByRole('switch', { name: 'Highlight the open chat' }).uncheck();
+  await p.bringToFront();
+  await expect.poll(() => outlined(p)).toEqual([]);
 });

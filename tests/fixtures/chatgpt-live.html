@@ -60,6 +60,14 @@
         document.querySelectorAll('aside a[aria-current]').forEach((x) => x.removeAttribute('aria-current'));
         if (a.closest('aside')) a.setAttribute('aria-current', 'page');
       });
+      // On load and back/forward, ChatGPT marks the chat the URL opens.
+      const markFromUrl = () =>
+        document.querySelectorAll('aside a').forEach((x) => {
+          if (x.getAttribute('href') === location.pathname) x.setAttribute('aria-current', 'page');
+          else x.removeAttribute('aria-current');
+        });
+      if (location.pathname !== '/') markFromUrl();
+      addEventListener('popstate', markFromUrl);
     </script>
   </body>
 </html>

@@ -107,7 +107,9 @@ describe('migrate', () => {
   it('clamps appearance values', () => {
     const d = defaultSettings().appearance;
     const s = migrate({ appearance: { thickness: 99, opacity: -5, radius: 'x', mode: 'neon', fill: 90 } });
-    expect(s.appearance).toEqual({ mode: d.mode, thickness: 6, opacity: 10, radius: d.radius, fill: 40 });
+    expect(s.appearance).toEqual({ mode: d.mode, thickness: 6, opacity: 10, radius: d.radius, fill: 40, highlight: true });
+    expect(migrate({ appearance: { highlight: false } }).appearance.highlight).toBe(false);
+    expect(migrate({ appearance: { highlight: 'yes' } }).appearance.highlight).toBe(true); // invalid -> default
     expect(migrate({ appearance: { mode: 'fill' } }).appearance.mode).toBe('fill');
     // Settings saved before fill existed get the new defaults (bar + fill).
     expect(migrate({ version: 1, appearance: { thickness: 3, opacity: 80, radius: 2 } }).appearance).toMatchObject({ mode: 'both', fill: 16, thickness: 3 });

@@ -1,7 +1,7 @@
 ﻿import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createColorizer } from '../../src/content/colorizer';
 import { NEUTRAL, NONE, addStarterKeywords, defaultSettings, type Settings } from '../../src/core/schema';
-import { ID, buildSidebar, mountPage, row, settle } from '../fixtures/sidebar';
+import { ID, buildSidebar, mountLivePage, mountPage, row, settle } from '../fixtures/sidebar';
 
 /** Opt-in rules + neutral fallback: the configuration these behaviours are tested against. */
 const starter = (): Settings => ({ ...addStarterKeywords(defaultSettings()), fallback: NEUTRAL });
@@ -67,6 +67,28 @@ describe('colorizer on fixture sidebar', () => {
     c.setFilter(null);
     expect(document.querySelectorAll('[data-crc-hidden]')).toHaveLength(0);
     expect(document.querySelector('.crc-filterbar')).toBeNull();
+  });
+
+  it('marks the open chat (aria-current) and follows the marker when it moves', async () => {
+    mountLivePage(ID.meeting);
+    start();
+    const active = () => [...document.querySelectorAll('[data-crc-active]')].map((e) => e.getAttribute('data-crc'));
+    expect(active()).toEqual([ID.meeting]);
+    document.querySelector(`a[href="/c/${ID.meeting}"]`)!.removeAttribute('aria-current');
+    document.querySelector(`a[href="/c/${ID.ts}"]`)!.setAttribute('aria-current', 'page');
+    await settle();
+    expect(active()).toEqual([ID.ts]);
+  });
+
+  it('highlight can be turned off independently, and stop() removes it', () => {
+    mountLivePage(ID.meeting);
+    const s = start();
+    expect(document.querySelectorAll('[data-crc-active]')).toHaveLength(1);
+    c.update({ ...s, appearance: { ...s.appearance, highlight: false } });
+    expect(document.querySelectorAll('[data-crc-active]')).toHaveLength(0);
+    c.update(s);
+    c.stop();
+    expect(document.querySelectorAll('[data-crc-active]')).toHaveLength(0);
   });
 
   it('reports a legend of colors in use with labels and counts', () => {
@@ -172,7 +194,7 @@ describe('colorizer on fixture sidebar', () => {
   it('applies appearance settings as CSS variables', () => {
     mountPage();
     const s = start();
-    c.update({ ...s, appearance: { mode: 'both', thickness: 2, opacity: 50, radius: 0, fill: 20 } });
+    c.update({ ...s, appearance: { mode: 'both', thickness: 2, opacity: 50, radius: 0, fill: 20, highlight: true } });
     expect(document.getElementById('crc-vars')!.textContent).toBe(':root{--crc-w:2px;--crc-o:0.5;--crc-r:0px;--crc-f:20%}');
     c.update({ ...s, appearance: { ...s.appearance, mode: 'bar' } });
     expect(document.getElementById('crc-vars')!.textContent).toContain('.crc-fill{display:none!important}');
