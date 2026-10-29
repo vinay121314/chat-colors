@@ -1,6 +1,6 @@
 ﻿import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createColorizer } from '../../src/content/colorizer';
-import { NEUTRAL, NONE, addStarterKeywords, defaultSettings, type Settings } from '../../src/core/schema';
+import { NEUTRAL, NONE, addStarterKeywords, chatKey, defaultSettings, setStatus, type Settings } from '../../src/core/schema';
 import { ID, buildSidebar, mountLivePage, mountPage, row, settle } from '../fixtures/sidebar';
 
 /** Opt-in rules + neutral fallback: the configuration these behaviours are tested against. */
@@ -115,6 +115,51 @@ describe('colorizer on fixture sidebar', () => {
     c.update(s);
     c.stop();
     expect(document.querySelectorAll('[data-crc-active]')).toHaveLength(0);
+  });
+
+  it('status filter (Working Set) hides other chats; pill names the status; Unassigned works', async () => {
+    mountLivePage(ID.meeting);
+    const s = start();
+    setStatus(s, [chatKey(ID.ts), chatKey(ID.plain)], 'active', 1);
+    setStatus(s, [chatKey(ID.recipe)], 'done', 1);
+    c.update(s);
+    c.setFilter('status:active');
+    const visible = () => [...document.querySelectorAll('[data-crc]:not([data-crc-hidden])')].map((e) => e.getAttribute('data-crc'));
+    expect(visible()).toEqual([ID.ts, ID.plain]);
+    expect(document.querySelector('.crc-filterbar')!.textContent).toContain('Showing Active · 2 chats');
+    c.setFilter('status:none');
+    expect(visible()).toEqual([ID.meeting, ID.project, ID.gpt]);
+    expect(c.list().find((e) => e.id === ID.recipe)?.status).toBe('done');
+  });
+
+  it('reports the open conversation once per change (visits), not on every rescan', async () => {
+    const opened = vi.fn();
+    mountLivePage(ID.meeting);
+    c = createColorizer({ setFilter: vi.fn(), opened });
+    history.replaceState({}, '', `/c/${ID.meeting}`);
+    c.update(starter());
+    document.querySelector('[role="list"]')!.append(document.createElement('span')); // rescan
+    await settle();
+    expect(opened.mock.calls).toEqual([[ID.meeting]]);
+    history.replaceState({}, '', `/c/${ID.ts}`);
+    document.querySelector('[role="list"]')!.append(document.createElement('span'));
+    await settle();
+    expect(opened.mock.calls).toEqual([[ID.meeting], [ID.ts]]);
+    history.replaceState({}, '', '/');
+  });
+
+  it('presenter mode conceals sidebar titles via CSS only (blur or dots), with optional reveal', () => {
+    mountLivePage(ID.meeting);
+    const s = start();
+    const css = () => document.getElementById('crc-vars')!.textContent!;
+    expect(css()).not.toContain('[data-crc] a{');
+    c.update({ ...s, presenter: { ...s.presenter, enabled: true, style: 'blur', strength: 8, reveal: true } });
+    expect(css()).toContain('[data-crc] a{filter:blur(8px)!important');
+    expect(css()).toContain('[data-crc]:hover a,[data-crc]:focus-within a{filter:none');
+    c.update({ ...s, presenter: { ...s.presenter, enabled: true, style: 'dots', reveal: false } });
+    expect(css()).toContain('-webkit-text-security:disc');
+    expect(css()).not.toContain(':hover a');
+    expect(document.querySelectorAll('[data-crc] button:not([aria-label="Open conversation options"])')).toHaveLength(0); // nothing added
   });
 
   it('reports a legend of colors in use with labels and counts', () => {

@@ -294,7 +294,7 @@ test('popup: categories, rules, preview, priority, appearance, import/export', a
   await tab(popup, 'Data');
   const [download] = await Promise.all([popup.waitForEvent('download'), popup.locator('#export').click()]);
   const exported = JSON.parse(readFileSync((await download.path())!, 'utf8'));
-  expect(exported.version).toBe(2);
+  expect(exported.version).toBe(3);
   expect(exported.appearance.thickness).toBe(2);
   expect(exported.appearance).not.toHaveProperty('openTabs');
 

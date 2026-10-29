@@ -1,7 +1,7 @@
 // Observes the sidebar and keeps row decoration in sync with settings. No chrome.* here (testable).
 // Purely visual: nothing interactive is injected into ChatGPT's rows. Colors are assigned in the popup.
 import { resolveColor, type Source } from '../core/rules';
-import { AUTO, type Appearance, type Settings } from '../core/schema';
+import { AUTO, STATUS_LABEL, chatKey, statusOf, type Settings, type Status } from '../core/schema';
 import {
   activeRow,
   decorate,
@@ -51,11 +51,37 @@ export interface ListEntry {
   label: string | null;
   group: GroupInfo | null;
   active: boolean;
+  /** Working Set status (null = Unassigned). */
+  status: Status | null;
 }
 
 export interface Host {
   /** Change the sidebar filter (persisted by the caller). */
   setFilter: (color: string | null) => void;
+  /** A different conversation became the open one in this tab (for Recently Revisited). */
+  opened?: (id: string) => void;
+}
+
+/** Does a row pass the sidebar filter? Color filter `#rrggbb`, or Working Set `status:<s|none>`. */
+function passes(filter: string | null, color: string | null, status: Status | null): boolean {
+  if (filter === null) return true;
+  if (filter.startsWith('status:')) return (status ?? 'none') === filter.slice(7);
+  return color === filter;
+}
+
+/**
+ * Presenter Mode CSS: conceals titles of every decorated sidebar row (chats, Projects, GPTs).
+ * Pure CSS on our own data-crc attribute; nothing is added to the rows.
+ */
+function presenterCss(s: Settings): string {
+  const p = s.presenter;
+  if (!p.enabled) return '';
+  const hide =
+    p.style === 'dots'
+      ? '-webkit-text-security:disc!important;'
+      : `filter:blur(${p.strength}px)!important;transition:filter .12s ease;`;
+  const reveal = p.reveal ? '[data-crc]:hover a,[data-crc]:focus-within a{filter:none!important;-webkit-text-security:none!important}' : '';
+  return `[data-crc] a{${hide}}${reveal}@media (prefers-reduced-motion:reduce){[data-crc] a{transition:none!important}}`;
 }
 
 export function createColorizer(host: Host) {
@@ -69,6 +95,8 @@ export function createColorizer(host: Host) {
   /** Group key -> name as shown in the sidebar (Project / GPT entries), refreshed every scan. */
   let groupNames = new Map<string, string>();
   let legend: LegendEntry[] = [];
+  /** Conversation last reported as opened (so rescans don't count as visits). */
+  let lastOpened: string | null = null;
   /** Navigation API (verified available live); absent in older engines / jsdom. */
   const nav = (globalThis as { navigation?: EventTarget }).navigation;
 
@@ -108,8 +136,9 @@ export function createColorizer(host: Host) {
   const groupName = (g: Group) => groupNames.get(g.key) || s?.groups[g.key]?.name || g.slug || kindOf(g.key);
   const groupInfo = (g: Group | null): GroupInfo | null => (g ? { key: g.key, name: groupName(g), kind: kindOf(g.key) } : null);
 
-  /** Human label for a color: category / Project name, else the hex. */
+  /** Human label for a filter value: status name, category / Project name, else the hex. */
   function labelFor(color: string): string {
+    if (color.startsWith('status:')) return STATUS_LABEL[color.slice(7) as Status | 'none'] ?? color;
     if (!s) return color;
     const cat = s.categories.find((c) => c.color === color);
     if (cat) return cat.name;
@@ -134,28 +163,38 @@ export function createColorizer(host: Host) {
     const openRow = s.appearance.highlight ? activeRow(rows) : undefined;
     rowCount = rows.length;
     const counts = new Map<string, number>();
+    let shown = 0;
     let firstBox: Element | null = null;
     for (const row of rows) {
       const color = resolveColor(row.id, getTitle(row.el), s, parseChatGroup(row.el.getAttribute('href'))?.key).color;
       const box = decorate(row, color);
       firstBox ??= box;
       seen.add(box);
-      setHidden(box, filter !== null && color !== filter);
+      const pass = passes(filter, color, statusOf(s, chatKey(row.id)));
+      if (pass) shown++;
+      setHidden(box, !pass);
       setActive(box, row === openRow);
       if (color) counts.set(color, (counts.get(color) ?? 0) + 1);
+    }
+    // Recently Revisited: report the open conversation once per change (not on every rescan).
+    const opened = parseConversationId(location.pathname);
+    if (opened !== lastOpened) {
+      lastOpened = opened;
+      if (opened) host.opened?.(opened);
     }
     legend = [...counts].map(([color, count]) => ({ color, count, label: labelFor(color) })).sort((a, b) => b.count - a.count);
 
     renderFilterBar(
       firstBox,
-      filter ? { color: filter, label: labelFor(filter), count: counts.get(filter) ?? 0 } : null,
+      filter ? { color: filter.startsWith('status:') ? 'currentColor' : filter, label: labelFor(filter), count: shown } : null,
       () => host.setFilter(null),
     );
     // Rows whose href no longer points at a target (recycled nodes) lose our decoration.
     for (const el of decorated(root)) if (!seen.has(el)) undecorate(el);
   }
 
-  function applyVars(a: Appearance): void {
+  function applyVars(settings: Settings): void {
+    const a = settings.appearance;
     if (!vars?.isConnected) {
       vars = document.createElement('style');
       vars.id = 'crc-vars';
@@ -167,7 +206,8 @@ export function createColorizer(host: Host) {
       `:root{--crc-w:${a.thickness}px;--crc-o:${a.opacity / 100};--crc-r:${a.radius}px;--crc-f:${a.fill}%;` +
       `--crc-ow:${a.outlineWidth}px;--crc-oo:${a.outlineOpacity}%;${oc}}` +
       (a.mode === 'bar' ? '.crc-fill{display:none!important}' : '') +
-      (a.mode === 'fill' ? '.crc-bar{display:none!important}' : '');
+      (a.mode === 'fill' ? '.crc-bar{display:none!important}' : '') +
+      presenterCss(settings);
   }
 
   function stop(): void {
@@ -191,7 +231,7 @@ export function createColorizer(host: Host) {
     update(next: Settings): void {
       s = next;
       if (!next.enabled) return stop();
-      applyVars(next.appearance);
+      applyVars(next);
       if (!running) {
         running = true;
         bodyObs.observe(document.body, { childList: true, subtree: true });
@@ -242,6 +282,7 @@ export function createColorizer(host: Host) {
             label: res.source === 'rule' ? (res.category?.name ?? null) : res.source === 'group' ? (gi?.name ?? null) : null,
             group: gi,
             active: row === open,
+            status: statusOf(s!, chatKey(row.id)),
           },
         ];
       });

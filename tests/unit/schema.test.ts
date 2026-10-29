@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { NONE, SCHEMA_VERSION, defaultSettings, migrate, normalizeHex, parseImport } from '../../src/core/schema';
+import {
+  NONE,
+  SCHEMA_VERSION,
+  chatKey,
+  defaultSettings,
+  matchesShortcut,
+  migrate,
+  normalizeHex,
+  parseChatKey,
+  parseImport,
+  setStatus,
+  statusOf,
+} from '../../src/core/schema';
 
 const ID = '11111111-1111-4111-8111-111111111111';
 
@@ -38,7 +50,7 @@ describe('migrate', () => {
       ],
     };
     const s = migrate(v1);
-    expect(s.version).toBe(2);
+    expect(s.version).toBe(SCHEMA_VERSION); // migrates through v2 to the current version
     expect(s.fallback).toBe(NONE);
     expect(s.overrides[ID]).toBe('#ff0000');
     expect(s.categories.map((c) => c.rules.map((r) => r.keyword))).toEqual([['standup'], [], ['client']]);
@@ -135,6 +147,80 @@ describe('migrate', () => {
   it('is idempotent', () => {
     const once = migrate({ overrides: { [ID]: '#abc' }, appearance: { thickness: 3 } });
     expect(migrate(structuredClone(once))).toEqual(once);
+  });
+});
+
+describe('v3: Working Set, Presenter, history, provider keys', () => {
+  it('v2 data loads unchanged with v3 defaults added', () => {
+    const v2 = { version: 2, overrides: { [ID]: '#123456' }, appearance: { mode: 'both' } };
+    const s = migrate(v2);
+    expect(s.version).toBe(3);
+    expect(s.overrides[ID]).toBe('#123456');
+    expect(s.appearance.mode).toBe('both');
+    expect(s.chats).toEqual({});
+    expect(s.presenter).toEqual({ enabled: false, style: 'blur', strength: 6, reveal: true, shortcut: 'Alt+Shift+P' });
+    expect(s.history).toEqual({ enabled: true });
+  });
+
+  it('chat keys are provider-namespaced; parseChatKey validates provider and id', () => {
+    expect(chatKey(ID)).toBe(`chatgpt:${ID}`);
+    expect(chatKey(ID, 'claude')).toBe(`claude:${ID}`);
+    expect(parseChatKey(`chatgpt:${ID.toUpperCase()}`)).toEqual({ provider: 'chatgpt', id: ID });
+    for (const bad of [ID, `bard:${ID}`, 'chatgpt:short', `:${ID}`, 42]) expect(parseChatKey(bad)).toBeNull();
+  });
+
+  it('statuses carry updatedAt; Unassigned is a timestamped null (sync-friendly); junk dropped', () => {
+    const s = defaultSettings();
+    setStatus(s, [chatKey(ID), 'not-a-key'], 'active', 1000);
+    expect(s.chats).toEqual({ [chatKey(ID)]: { status: 'active', updatedAt: 1000 } });
+    setStatus(s, [chatKey(ID)], null, 2000);
+    expect(s.chats[chatKey(ID)]).toEqual({ status: null, updatedAt: 2000 });
+    expect(statusOf(s, chatKey(ID))).toBeNull();
+
+    const m = migrate({
+      chats: {
+        [`chatgpt:${ID}`]: { status: 'hold', updatedAt: 5 },
+        [`claude:${ID}`]: { status: 'done', updatedAt: 6 }, // future adapter data is preserved
+        [`chatgpt:${ID.replace('1', '2')}`]: { status: 'weird', updatedAt: -1 },
+        nonsense: { status: 'active', updatedAt: 1 },
+      },
+    });
+    expect(m.chats).toEqual({
+      [`chatgpt:${ID}`]: { status: 'hold', updatedAt: 5 },
+      [`claude:${ID}`]: { status: 'done', updatedAt: 6 },
+      [`chatgpt:${ID.replace('1', '2')}`]: { status: null, updatedAt: 0 },
+    });
+  });
+
+  it('presenter settings are validated and clamped', () => {
+    const p = migrate({ presenter: { enabled: true, style: 'dots', strength: 99, reveal: false, shortcut: 'Ctrl+Alt+P' } }).presenter;
+    expect(p).toEqual({ enabled: true, style: 'dots', strength: 12, reveal: false, shortcut: 'Ctrl+Alt+P' });
+    const bad = migrate({ presenter: { enabled: 'yes', style: 'x', strength: 'big', shortcut: 'F12' } }).presenter;
+    expect(bad).toEqual(defaultSettings().presenter);
+  });
+
+  it('matchesShortcut requires the exact modifiers', () => {
+    const ev = (o: Partial<{ altKey: boolean; shiftKey: boolean; ctrlKey: boolean; metaKey: boolean; code: string }>) => ({
+      altKey: false,
+      shiftKey: false,
+      ctrlKey: false,
+      metaKey: false,
+      code: 'KeyP',
+      ...o,
+    });
+    expect(matchesShortcut(ev({ altKey: true, shiftKey: true }), 'Alt+Shift+P')).toBe(true);
+    expect(matchesShortcut(ev({ altKey: true, shiftKey: true, ctrlKey: true }), 'Alt+Shift+P')).toBe(false);
+    expect(matchesShortcut(ev({ altKey: true }), 'Alt+Shift+P')).toBe(false);
+    expect(matchesShortcut(ev({ ctrlKey: true, altKey: true }), 'Ctrl+Alt+P')).toBe(true);
+    expect(matchesShortcut(ev({ altKey: true, shiftKey: true, code: 'KeyH' }), 'Alt+Shift+H')).toBe(true);
+    expect(matchesShortcut(ev({ altKey: true, shiftKey: true }), 'off')).toBe(false);
+  });
+
+  it('export/import round-trips statuses and presenter settings', () => {
+    const s = defaultSettings();
+    setStatus(s, [chatKey(ID)], 'done', 42);
+    s.presenter.enabled = true;
+    expect(parseImport(JSON.stringify(s))).toEqual(s);
   });
 });
 

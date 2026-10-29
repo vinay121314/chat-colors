@@ -1,4 +1,5 @@
-import { migrate, type Settings } from './schema';
+import { STATUSES, migrate, type Settings } from './schema';
+import { normalizeVisits, recordVisit, type Visits } from './visits';
 
 export const KEY = 'crc:settings';
 /** Popup -> content script: "which conversation is open in this tab?" */
@@ -32,14 +33,15 @@ export async function update(fn: (s: Settings) => void): Promise<Settings> {
 }
 
 /**
- * Sidebar filter: a #rrggbb color (show only chats with that color) or null. Stored apart from
- * settings so it is never exported and a reset doesn't touch it.
+ * Sidebar filter: a #rrggbb color, or `status:<active|hold|done|none>` (Working Set), or null.
+ * Stored apart from settings so it is never exported and a reset doesn't touch it.
  */
 export const FILTER_KEY = 'crc:filter';
+const FILTER_RE = new RegExp(`^(#[0-9a-f]{6}|status:(${STATUSES.join('|')}|none))$`);
+export const validFilter = (v: unknown): string | null => (typeof v === 'string' && FILTER_RE.test(v) ? v : null);
 
 export async function loadFilter(): Promise<string | null> {
-  const v = (await chrome.storage.local.get(FILTER_KEY))[FILTER_KEY];
-  return typeof v === 'string' && /^#[0-9a-f]{6}$/.test(v) ? v : null;
+  return validFilter((await chrome.storage.local.get(FILTER_KEY))[FILTER_KEY]);
 }
 
 export async function saveFilter(v: string | null): Promise<void> {
@@ -49,9 +51,23 @@ export async function saveFilter(v: string | null): Promise<void> {
 export function onFilter(cb: (v: string | null) => void): void {
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local' || !(FILTER_KEY in changes)) return;
-    const v = changes[FILTER_KEY]?.newValue;
-    cb(typeof v === 'string' && /^#[0-9a-f]{6}$/.test(v) ? v : null);
+    cb(validFilter(changes[FILTER_KEY]?.newValue));
   });
+}
+
+/** Recently Revisited: device-local visit history (ids + timestamps only; never exported). */
+export const VISITS_KEY = 'crc:visits';
+
+export async function loadVisits(): Promise<Visits> {
+  return normalizeVisits((await chrome.storage.local.get(VISITS_KEY))[VISITS_KEY]);
+}
+
+export async function recordVisitFor(key: string, now: number = Date.now()): Promise<void> {
+  await chrome.storage.local.set({ [VISITS_KEY]: recordVisit(await loadVisits(), key, now) });
+}
+
+export async function clearVisits(): Promise<void> {
+  await chrome.storage.local.remove(VISITS_KEY);
 }
 
 export function onChange(cb: (s: Settings) => void): void {
