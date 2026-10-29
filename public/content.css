@@ -110,6 +110,55 @@
   }
 }
 
+/*
+ * "Open in another tab" badge: always visible (it's information, not a hover action), sits left of
+ * our color dot. Frosted pill so it stays legible over a long, truncated title.
+ */
+.crc-open {
+  all: unset;
+  box-sizing: border-box !important;
+  position: absolute !important;
+  right: 62px;
+  top: 50% !important;
+  width: 22px !important;
+  height: 22px !important;
+  margin-top: -11px !important;
+  display: grid !important;
+  place-items: center !important;
+  border-radius: 7px !important;
+  cursor: pointer !important;
+  z-index: 3 !important;
+  background: color-mix(in srgb, currentColor 9%, transparent) !important;
+  backdrop-filter: blur(6px) !important;
+  opacity: 0.85;
+}
+/* Icon: two overlapping windows. */
+.crc-open::before,
+.crc-open::after {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 7px;
+  border: 1.5px solid currentColor;
+  border-radius: 2px;
+}
+.crc-open::before {
+  transform: translate(-2px, 2px);
+}
+.crc-open::after {
+  transform: translate(2px, -2px);
+  background: color-mix(in srgb, currentColor 18%, transparent);
+}
+.crc-open:hover {
+  opacity: 1;
+  background: color-mix(in srgb, currentColor 16%, transparent) !important;
+}
+.crc-open:focus-visible {
+  opacity: 1;
+  outline: 2px solid currentColor !important;
+  outline-offset: 1px !important;
+}
+
 /* Filter: rows that don't match the chosen color are hidden; a sticky pill says so. */
 [data-crc-hidden] {
   display: none !important;

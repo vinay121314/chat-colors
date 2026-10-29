@@ -301,6 +301,7 @@ export function undecorate(el: Element): void {
   (el as HTMLElement).style?.removeProperty('--crc-c');
   el.removeAttribute(HIDDEN_ATTR);
   el.removeAttribute(ACTIVE_ATTR);
+  child(el, OPEN_CLASS)?.remove();
   child(el, BTN_CLASS)?.remove();
   child(el, BAR_CLASS)?.remove();
   child(el, FILL_CLASS)?.remove();
@@ -311,6 +312,36 @@ export function undecorate(el: Element): void {
 
 const HIDDEN_ATTR = 'data-crc-hidden';
 const ACTIVE_ATTR = 'data-crc-active';
+
+const OPEN_CLASS = 'crc-open';
+
+/**
+ * "Open in another tab" badge: a small button that asks the worker to switch to that tab instead of
+ * opening a duplicate. The row link itself keeps ChatGPT's native behaviour.
+ */
+export function setOpenBadge(box: Element, on: boolean, focus: (id: string) => void): void {
+  const existing = child(box, OPEN_CLASS);
+  if (!on) {
+    existing?.remove();
+    return;
+  }
+  if (existing) return;
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = OPEN_CLASS;
+  b.title = 'Open in another tab. Switch to it';
+  b.setAttribute('aria-label', 'Open in another tab. Switch to it');
+  b.addEventListener('pointerdown', (e) => e.stopPropagation());
+  b.addEventListener('mousedown', (e) => e.stopPropagation());
+  b.addEventListener('keydown', (e) => e.stopPropagation());
+  b.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const id = b.parentElement?.getAttribute(ID_ATTR); // read at click time (rows get recycled)
+    if (id) focus(id);
+  });
+  box.append(b);
+}
 
 /** Marks the row of the conversation open in this tab (outlined by content.css). */
 export function setActive(el: Element, on: boolean): void {
@@ -405,7 +436,7 @@ function tree(el: Element, depth = 0): string[] {
   const out = [pad + describe(el)];
   for (const n of el.childNodes) {
     if (n.nodeType === Node.TEXT_NODE && n.nodeValue?.trim()) out.push(`${pad}  #text(${n.nodeValue.trim().length})`);
-    else if (n instanceof Element && ![BTN_CLASS, BAR_CLASS, FILL_CLASS].some((c) => n.classList.contains(c))) out.push(...tree(n, depth + 1));
+    else if (n instanceof Element && ![BTN_CLASS, BAR_CLASS, FILL_CLASS, OPEN_CLASS].some((c) => n.classList.contains(c))) out.push(...tree(n, depth + 1));
   }
   return out;
 }

@@ -29,6 +29,17 @@ Layering: `core` knows nothing about the DOM or ChatGPT. `adapter` knows nothing
 - Both observers schedule one `requestAnimationFrame` scan. Many mutations collapse into one pass.
 - Our own writes are attributes the observer ignores (`data-crc*`, `style`) plus one button per row, created once. That causes at most one extra no-op scan, with no feedback loop.
 
+## Background worker (`src/background/`)
+
+Event-driven MV3 service worker for "already open in another tab". It adds no permissions.
+
+- **Presence:** the content script sends `crc:presence {id}` (the conversation ID, or `null`) after scans, when the extension is turned on or off, and on `pagehide`. The worker stores `tabId → id` in `chrome.storage.session` and replies with the IDs open in other tabs. It broadcasts `crc:open-elsewhere {ids}` to every known tab and prunes tabs that don't answer.
+- **Switching:** `crc:focus {id}` → `findOtherTab` (never the sender) → `tabs.update(active)` → `windows.update(focused)`. The window ID comes from the `update` result, so tabs dragged between windows still work. A tab that has vanished is forgotten.
+- **Lifecycle:** `tabs.onRemoved` handles closed tabs. `pagehide` and pruning handle navigation away and reloads. In-app navigation is re-reported from scans.
+- **Suspension:** listeners are registered synchronously at top level, and all state is in `storage.session`. Read-modify-write cycles go through a promise queue, so concurrent reports aren't lost.
+- **Never used:** `tabs.query`, `tabs.onUpdated`, or URL/title fields. `tests/unit/background.test.ts` uses a fake API without them.
+- Pure logic lives in `registry.ts` (`othersFor`, `findOtherTab`).
+
 ## Decoration
 
 - **Row container (`rowBox`):** on some layouts the `<a>` wraps only the title and the full-width row is an ancestor. Decorating the `<a>` put the bar and dot on top of the title, which was reported on the live site. Decoration goes on the outermost ancestor that still contains exactly this one conversation and is still one row tall. It never climbs into `nav`, `aside`, `section`, `ul` or `ol`. The result is cached per link in a WeakMap.

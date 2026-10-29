@@ -15,6 +15,7 @@ import {
   renderFilterBar,
   setActive,
   setHidden,
+  setOpenBadge,
   activeRow,
   undecorate,
   type Group,
@@ -41,6 +42,10 @@ export interface Host {
   /** Apply a settings mutation (persisted by the caller). */
   write: (fn: (s: Settings) => void) => void;
   setFilter: (color: string | null) => void;
+  /** Ask the worker to switch to the other tab showing this conversation. */
+  focusTab: (id: string) => void;
+  /** Called after every scan (navigation, sidebar changes): lets the caller report presence. */
+  scanned?: () => void;
 }
 
 export function createColorizer(host: Host) {
@@ -54,6 +59,8 @@ export function createColorizer(host: Host) {
   /** Group key -> name as shown in the sidebar (Project / GPT entries), refreshed every scan. */
   let groupNames = new Map<string, string>();
   let legend: LegendEntry[] = [];
+  /** Conversation ids open in OTHER tabs, as last reported by the worker. */
+  let elsewhere = new Set<string>();
   /** Navigation API (verified available live); absent in older engines / jsdom. */
   const nav = (globalThis as { navigation?: EventTarget }).navigation;
 
@@ -156,6 +163,7 @@ export function createColorizer(host: Host) {
       seen.add(box);
       setHidden(box, filter !== null && color !== filter);
       setActive(box, row === openRow);
+      setOpenBadge(box, s.appearance.openTabs && elsewhere.has(row.id), host.focusTab);
       if (color) counts.set(color, (counts.get(color) ?? 0) + 1);
     }
     legend = [...counts].map(([color, count]) => ({ color, count, label: labelFor(color) })).sort((a, b) => b.count - a.count);
@@ -167,6 +175,7 @@ export function createColorizer(host: Host) {
     );
     // Rows whose href no longer points at a target (recycled nodes) lose our decoration.
     for (const el of decorated(root)) if (!seen.has(el)) undecorate(el);
+    host.scanned?.();
   }
 
   function applyVars(a: Appearance): void {
@@ -213,6 +222,11 @@ export function createColorizer(host: Host) {
     },
     setFilter(next: string | null): void {
       filter = next;
+      scan();
+    },
+    /** Conversation ids open in other tabs (from the worker). */
+    setElsewhere(ids: string[]): void {
+      elsewhere = new Set(ids);
       scan();
     },
     stop,

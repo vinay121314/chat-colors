@@ -15,7 +15,7 @@ const GREEN = '#16a34a'; // Work
 
 let c: ReturnType<typeof createColorizer>;
 afterEach(() => c?.stop());
-const host = { write: vi.fn(), setFilter: vi.fn() };
+const host = { write: vi.fn(), setFilter: vi.fn(), focusTab: vi.fn(), scanned: vi.fn() };
 
 function start(s: Settings = starter()) {
   c = createColorizer(host);
@@ -78,6 +78,33 @@ describe('colorizer on fixture sidebar', () => {
     document.querySelector(`a[href="/c/${ID.ts}"]`)!.setAttribute('aria-current', 'page');
     await settle();
     expect(active()).toEqual([ID.ts]);
+  });
+
+  it('"open in another tab" badge: shown for ids from the worker, switches via host, toggleable', () => {
+    mountLivePage(ID.meeting);
+    const s = start();
+    const badges = () => [...document.querySelectorAll('.crc-open')].map((b) => b.parentElement!.getAttribute('data-crc'));
+    expect(badges()).toEqual([]);
+    c.setElsewhere([ID.ts, ID.project]);
+    expect(badges()).toEqual([ID.ts, ID.project]);
+    (document.querySelector(`[data-crc="${ID.ts}"] .crc-open`) as HTMLButtonElement).click();
+    expect(host.focusTab).toHaveBeenCalledWith(ID.ts);
+    c.setElsewhere([ID.project]);
+    expect(badges()).toEqual([ID.project]);
+    c.update({ ...s, appearance: { ...s.appearance, openTabs: false } });
+    expect(badges()).toEqual([]);
+    c.update(s);
+    c.stop();
+    expect(document.querySelectorAll('.crc-open')).toHaveLength(0);
+  });
+
+  it('reports every scan to the host (presence hook)', async () => {
+    mountLivePage(ID.meeting);
+    start();
+    const n = host.scanned.mock.calls.length;
+    document.querySelector(`a[href="/c/${ID.ts}"]`)!.setAttribute('aria-current', 'page');
+    await settle();
+    expect(host.scanned.mock.calls.length).toBeGreaterThan(n);
   });
 
   it('highlight can be turned off independently, and stop() removes it', () => {
@@ -194,7 +221,7 @@ describe('colorizer on fixture sidebar', () => {
   it('applies appearance settings as CSS variables', () => {
     mountPage();
     const s = start();
-    c.update({ ...s, appearance: { mode: 'both', thickness: 2, opacity: 50, radius: 0, fill: 20, highlight: true } });
+    c.update({ ...s, appearance: { mode: 'both', thickness: 2, opacity: 50, radius: 0, fill: 20, highlight: true, openTabs: true } });
     expect(document.getElementById('crc-vars')!.textContent).toBe(':root{--crc-w:2px;--crc-o:0.5;--crc-r:0px;--crc-f:20%}');
     c.update({ ...s, appearance: { ...s.appearance, mode: 'bar' } });
     expect(document.getElementById('crc-vars')!.textContent).toContain('.crc-fill{display:none!important}');

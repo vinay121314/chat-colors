@@ -5,6 +5,14 @@ export const KEY = 'crc:settings';
 export const MSG_CURRENT = 'crc:current';
 /** Popup -> content script: structural diagnostics (no titles, ids masked). */
 export const MSG_DIAG = 'crc:diag';
+/** Content -> worker: "this tab now shows conversation <id | null>". Reply: ids open in other tabs. */
+export const MSG_PRESENCE = 'crc:presence';
+/** Content -> worker: "switch to the other tab showing <id>". Reply: boolean. */
+export const MSG_FOCUS = 'crc:focus';
+/** Worker -> content: conversation ids currently open in other tabs. */
+export const MSG_OPEN = 'crc:open-elsewhere';
+/** chrome.storage.session key for the worker's tabId -> conversation id map (cleared on browser exit). */
+export const OPEN_KEY = 'crc:open';
 
 /** Loads settings; malformed or missing data is repaired to valid defaults. */
 export async function load(): Promise<Settings> {

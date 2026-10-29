@@ -518,6 +518,7 @@ function render(): void {
   const focusKey = (document.activeElement as HTMLElement | null)?.dataset.key;
   $('enabled').checked = s.enabled;
   $('highlight').checked = s.appearance.highlight;
+  $('open-tabs').checked = s.appearance.openTabs;
   document.body.classList.toggle('disabled', !s.enabled);
   $('fallback').value = s.fallback === NONE ? NEUTRAL : s.fallback;
   $('fallback-on').checked = s.fallback !== NONE;
@@ -576,6 +577,7 @@ function wire(): void {
   $('version').textContent = chrome.runtime.getManifest().version;
   $('enabled').onchange = () => commit((x) => (x.enabled = $('enabled').checked));
   $('highlight').onchange = () => commit((x) => (x.appearance.highlight = $('highlight').checked));
+  $('open-tabs').onchange = () => commit((x) => (x.appearance.openTabs = $('open-tabs').checked));
   $('add-cat').onclick = () => {
     const id = newId();
     const color = PALETTE[s.categories.length % PALETTE.length]!;
