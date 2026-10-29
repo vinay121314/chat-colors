@@ -1,4 +1,36 @@
-# QA report — v1.0.0
+# QA report
+
+## v1.1.0 local release candidate (2026-10-29): Chat Colors rebrand
+
+**Status: local release candidate. Not live-verified in full and not ready for public release.** Nothing was published to the Chrome Web Store or pushed to GitHub.
+
+Changes: renamed to **Chat Colors** (name, short name, description, popup, docs), original icon (`assets/icon.svg`, 16/32/48/128 PNGs, `action.default_icon`), and the reserved `claude` provider removed (ChatGPT-only). No behavior, storage or permission changes otherwise.
+
+**Automated (fixture) results:**
+
+| Check | Result |
+|---|---|
+| Lint, typecheck, production build | ✅ pass |
+| Unit (Vitest) | ✅ 141/141 |
+| Browser (Playwright, built extension in Chromium, fixture pages) | ✅ 33/33 |
+| Permissions | ✅ unchanged: `["storage"]`, content script on `https://chatgpt.com/*` only, no background worker |
+| Storage compatibility | ✅ `crc:settings`, `crc:filter`, `crc:visits` keys and `chatgpt:` chat keys unchanged; schema still v3, no migration added |
+| Popup branding and icon | ✅ inspected in light and dark (`docs/screenshots/popup-*.png`); icon checked at 16/32/48/128 on light and dark (`docs/screenshots/icon-preview.png`) |
+
+### Required before public release: live checks still not performed
+
+These six were **not tested** on live chatgpt.com (see the table below). Each must pass live on a logged-in account with this build before a public release:
+
+- [ ] **3. Custom GPT chat coloring:** chats under a custom GPT get colored; a GPT-level color applies to its chats.
+- [ ] **4. Keyword rules:** add keywords, confirm matching titles are colored; rule priority and *Test a title* behave as in the popup.
+- [ ] **5. Bulk actions:** select several chats in *Chats*, apply a category, preset, HEX and Remove; unselected chats unchanged.
+- [ ] **6. Working Set filters:** set statuses; filter the sidebar by status and clear the filter.
+- [ ] **7. Recently Revisited:** open a chat twice; it appears in the view; the history switch and *Clear history* work.
+- [ ] **8. Presenter Mode:** shortcut and eye button toggle it; blur and dots; reveal on hover; colors and outline stay visible.
+
+Also re-check on this build: the toolbar icon and the popup header render correctly, and colors and settings from v1.0.0 are still present after updating in place (load unpacked over the same folder; don't remove the extension, because that deletes its storage).
+
+---
 
 ## Live verification on chatgpt.com (2026-10-29, user's logged-in account)
 

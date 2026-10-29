@@ -1,6 +1,6 @@
 {
   "name": "chat-colors",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Chat Colors: color-code ChatGPT sidebar conversations with manual colors and local keyword rules.",
   "license": "MIT",
   "private": true,
