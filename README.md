@@ -18,6 +18,7 @@ A small Chrome extension (Manifest V3) that adds colored left borders to convers
 - **Precedence:** a manual color first, then the first matching enabled rule in priority order, then the fallback color.
 - **Stable IDs.** Colors are keyed by the conversation UUID from the URL, including Project and custom-GPT chats, so renaming a chat keeps its manual color while automatic colors update.
 - **Appearance:** *Bar*, *Fill* (a tinted row background), or *Bar + fill* (the default), with fill strength, bar width, opacity and roundness, plus a live preview and a global on/off switch. The color is drawn by the extension's own overlay elements on the whole row, so there's no layout shift and ChatGPT's row styles are never changed. Respects `prefers-reduced-motion`.
+- **Open-chat highlight:** the conversation open in the tab gets a subtle outline that follows you as you switch chats (including Back/Forward) and keeps its own color. It uses ChatGPT's own `aria-current` marker, falling back to the URL. You can turn it off under *Style*.
 - **Troubleshooting:** the popup's header shows how many chats were detected. *Data → Copy diagnostics* produces a structure-only report (no titles, ids masked) for bug reports.
 - **Import/export** settings as JSON, with validation.
 - **Private by design:** only the `storage` permission, runs only on `chatgpt.com`, no network requests. See [PRIVACY.md](PRIVACY.md).
